@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import http from "http";
 import sgMail from "@sendgrid/mail";
 import { PrismaClient } from "@prisma/client";
 import multer from "multer";
@@ -9,6 +10,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import genaiRoute from './genai.js';
+import { buildAdminRouter } from "./admin/router.js";
+import { buildNgoRouter } from "./ngo/router.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +26,8 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 app.use('/genai', genaiRoute)
+app.use("/admin", buildAdminRouter(prisma));
+app.use("/ngos", buildNgoRouter(prisma));
 
 const otpStorage = {};
 
@@ -115,6 +120,45 @@ app.post("/create-campaign", upload.fields([
       imageUrlLink, // URL alternative if no file upload
       milestones 
     } = req.body;
+
+    if (!ngoRegistrationNumber) {
+      return res.status(400).json({ success: false, message: "ngoRegistrationNumber is required" });
+    }
+
+    if (!walletaddress) {
+      return res.status(400).json({ success: false, message: "walletaddress is required" });
+    }
+
+    const walletAddrNormalized = String(walletaddress).toLowerCase();
+
+    // Only a registered/approved NGO can create a campaign.
+    const ngoProfile = await prisma.nGOProfile.findFirst({
+      where: {
+        registrationNumber: String(ngoRegistrationNumber),
+        status: { in: ["APPROVED", "ACTIVE"] },
+      },
+    });
+
+    if (!ngoProfile) {
+      return res.status(403).json({
+        success: false,
+        message: "NGO not approved/active. Register and get approval before creating campaigns.",
+      });
+    }
+
+    if (!ngoProfile.walletAddress) {
+      return res.status(403).json({
+        success: false,
+        message: "NGO wallet is not set. Please register your NGO with a wallet address.",
+      });
+    }
+
+    if (String(ngoProfile.walletAddress).toLowerCase() !== walletAddrNormalized) {
+      return res.status(403).json({
+        success: false,
+        message: "walletaddress does not match the registered NGO wallet.",
+      });
+    }
     
     // Handle file paths
     let imageUrl = null;
@@ -143,8 +187,9 @@ app.post("/create-campaign", upload.fields([
     // Create campaign in database
     const campaign = await prisma.campaign.create({
       data: {
+        ngoId: ngoProfile.id,
         title,
-        walletaddress,
+        walletaddress: walletAddrNormalized,
         description,
         imageUrl,
         raised: "0",
@@ -238,7 +283,21 @@ app.post('/campaigns/:id/updateRaised', async (req, res) => {
   res.json(cam);
 });
 
-app.listen(5000, () => console.log("Server running on port 5000"));
+const port = Number.parseInt(process.env.PORT ?? "", 10) || 5000;
+const server = http.createServer(app);
+
+server.on("error", (err) => {
+  if (err && typeof err === "object" && "code" in err && err.code === "EADDRINUSE") {
+    const suggestedPort = port + 1;
+    console.error(
+      `Port ${port} is already in use. Set PORT in be/.env to another value (e.g. PORT=${suggestedPort}).`
+    );
+    process.exit(1);
+  }
+  throw err;
+});
+
+server.listen(port, () => console.log(`Server running on port ${port}`));
 
 // Remove the CommonJS export since we're using ES modules
 // module.exports = app;

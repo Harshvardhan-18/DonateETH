@@ -9,6 +9,7 @@ import { useState } from "react";
 import { ImagePlus, Loader, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation"; // Import the router for navigation
 import { motion } from "framer-motion";
+import { apiUrl } from "@/lib/api";
 
 
 export default function CreateCampaignPage() {
@@ -35,7 +36,7 @@ export default function CreateCampaignPage() {
     setIsSubmitting(true);
   
     try {
-      const response = await fetch("https://ngoledger.onrender.com/verify-otp", {
+      const response = await fetch(apiUrl("/verify-otp"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formData.title, code: formData.goal }),
@@ -63,7 +64,7 @@ export default function CreateCampaignPage() {
      setSendingOtp(true);
    
      try {
-       const response = await fetch("https://ngoledger.onrender.com/send-otp", {
+       const response = await fetch(apiUrl("/send-otp"), {
          method: "POST",
          headers: { "Content-Type": "application/json" },
          body: JSON.stringify({ email: formData.title }),

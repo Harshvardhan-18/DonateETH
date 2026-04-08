@@ -12,6 +12,7 @@
     import axios from "axios";
     import { useAccount } from "wagmi";
     import { checkImageExistsOnWeb } from "./geminiapi"; // Import the new function
+    import { apiUrl } from "@/lib/api";
     
     export default function CreateCampaignPage() {
       const { address, isConnected } = useAccount();
@@ -26,6 +27,8 @@
       const [goal, setGoal] = useState("");
       const [daysLeft, setDaysLeft] = useState("");
       const [ngoRegistrationNumber, setNgoRegistrationNumber] = useState("");
+      const [ngoAllowed, setNgoAllowed] = useState(false);
+      const [isNgoChecking, setIsNgoChecking] = useState(false);
       const [contactName, setContactName] = useState("");
       const [contactEmail, setContactEmail] = useState("");
       const [contactPhone, setContactPhone] = useState("");
@@ -42,8 +45,53 @@
         setRaised("0");
       }, []);
     
+      useEffect(() => {
+        const checkNgo = async () => {
+          // Wagmi can briefly report `isConnected=false` during reconnect.
+          // If we already have an address, we can still check approval.
+          if (!address) {
+            setNgoAllowed(false);
+            return;
+          }
+
+          setIsNgoChecking(true);
+          try {
+            const walletAddress = address.toLowerCase();
+            console.log("Checking NGO status for wallet address:", walletAddress);
+            const res = await fetch(apiUrl(`/ngos/me?walletAddress=${walletAddress}`), { cache: "no-store" });
+            console.log(res);
+            if (!res.ok) throw new Error("Failed to check NGO status");
+            const data = await res.json();
+            setNgoAllowed(Boolean(data.allowed));
+            // Prefill registration number for approved NGOs.
+            if (data?.ngo?.registrationNumber) {
+              setNgoRegistrationNumber((prev) => prev || data.ngo.registrationNumber);
+            }
+          } catch (error) {
+            console.error("Error checking NGO status:", error);
+            setNgoAllowed(false);
+          } finally {
+            setIsNgoChecking(false);
+          }
+        };
+
+        checkNgo();
+      }, [address]);
+
+      const canCreate = Boolean(isConnected && ngoAllowed);
+
       const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!canCreate) {
+          alert("Only registered and approved NGOs can create campaigns. Please register at /ngos.");
+          setIsSubmitting(false);
+          return;
+        }
+        if (!ngoRegistrationNumber) {
+          alert("NGO registration number is required.");
+          setIsSubmitting(false);
+          return;
+        }
         setIsSubmitting(true);
         
         // Check if the image exists on the web before submitting
@@ -103,11 +151,7 @@
         formData.append("milestones", JSON.stringify(milestones));
     
         try {
-          const response = await axios.post("https://ngoledger.onrender.com/create-campaign", formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            }
-          });
+          const response = await axios.post(apiUrl("/create-campaign"), formData);
       
           const data = await response.data;
           if (data.success) {
@@ -193,6 +237,27 @@
               >
                 Start your fundraising campaign and make a difference.
               </motion.p>
+
+                {isNgoChecking ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4 }}
+                    className="mt-4 p-3 bg-muted rounded-lg text-sm text-muted-foreground"
+                  >
+                    Checking your NGO registration...
+                  </motion.div>
+                ) : isConnected && !ngoAllowed ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4 }}
+                    className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm text-yellow-800 dark:text-yellow-200"
+                  >
+                    Only registered and approved NGOs can create campaigns. Register at{" "}
+                    <a href="/ngos" className="underline">/ngos</a>.
+                  </motion.div>
+                ) : null}
             </div>
     
             <motion.form
@@ -242,6 +307,8 @@
                       value={ngoRegistrationNumber}
                       onChange={(e) => setNgoRegistrationNumber(e.target.value)}
                       required
+                      disabled={canCreate && Boolean(ngoRegistrationNumber)}
+                      readOnly={canCreate && Boolean(ngoRegistrationNumber)}
                     />
                   </div>
     
@@ -482,7 +549,15 @@
               type="submit"
               size="lg"
               className="w-full rounded-lg shadow-md text-lg font-medium transition duration-300 hover:bg-primary/90"
-      //</motion.form>disabled={//Boolean(isSubmitting || !isConnected || isCheckingImage || (imageFile && imageCheckResult === "found it"))}
+              disabled={Boolean(
+                isSubmitting ||
+                  !isConnected ||
+                  !ngoAllowed ||
+                  !ngoRegistrationNumber ||
+                  isNgoChecking ||
+                  isCheckingImage ||
+                  (imageFile && imageCheckResult === "found it")
+              )}
       >
       {isSubmitting ? (
         <>

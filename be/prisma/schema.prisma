@@ -12,6 +12,7 @@ datasource db {
 
 model Campaign {
   id                    String      @id @default(uuid())
+  ngoId                 String
   walletaddress         String?
   title                 String?
   description           String?
@@ -26,6 +27,10 @@ model Campaign {
   contactPhone          String?
   certificateUrl        String?
   supportingDocUrl      String?
+  isActive              Boolean     @default(true)
+  ngo                   NGOProfile  @relation(fields: [ngoId], references: [id], onDelete: Restrict)
+  donations             DonationTransaction[]
+  proofs                DocumentProof[]
 }
 
 model Milestone {
@@ -34,4 +39,59 @@ model Milestone {
   amount     String
   status     String
   campaignId String
+}
+
+model NGOProfile {
+  id                 String      @id @default(uuid())
+  registrationNumber String?     @unique
+  name               String
+  email              String?
+  phone              String?
+  walletAddress      String?     @unique
+  status             NGOStatus   @default(PENDING)
+  suspendedAt        DateTime?
+  createdAt          DateTime    @default(now())
+  campaigns          Campaign[]
+}
+
+model DonationTransaction {
+  id          String   @id @default(uuid())
+  campaignId  String?
+  donorWallet String
+  ngoWallet   String
+  amountEth   Decimal  @db.Decimal(18, 8)
+  txHash      String   @unique
+  createdAt   DateTime @default(now())
+  campaign    Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+}
+
+model DocumentProof {
+  id         String        @id @default(uuid())
+  campaignId String
+  ipfsCid    String
+  type       DocumentType
+  status     ReviewStatus  @default(PENDING)
+  createdAt  DateTime      @default(now())
+  verifiedAt DateTime?
+  campaign   Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+enum NGOStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+  ACTIVE
+}
+
+enum DocumentType {
+  RECEIPT
+  INVOICE
+  PROOF
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

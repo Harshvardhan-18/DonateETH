@@ -8,6 +8,7 @@ import { useState } from "react";
 import { CampaignCard } from "@/components/campaign-card";
 import { motion } from "framer-motion";
 import { useEffect } from "react";
+import { apiUrl } from "@/lib/api";
 
 
 export default function CampaignsPage() {
@@ -18,7 +19,7 @@ export default function CampaignsPage() {
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
-        const response = await fetch("https://ngoledger.onrender.com/campaigns");
+        const response = await fetch(apiUrl("/campaigns"));
         if (!response.ok) {
           throw new Error("Failed to fetch campaigns");
         }

@@ -42,6 +42,14 @@ export function Navbar() {
             Campaigns
           </Link>
           <Link
+            href="/ngos"
+            className={`text-sm hover:text-gray-400 font-medium transition duration-500 ease-in-out ${
+              pathname === "/ngos" ? "text-blue-300 font-bold" : ""
+            }`}
+          >
+            NGOs
+          </Link>
+          <Link
             href="/create"
             className={`text-sm hover:text-gray-400 font-medium transition duration-500 ease-in-out ${
               isConnected && location.pathname === "/create" ? "text-blue-300 font-bold" : ""

@@ -45,8 +45,7 @@ To address these challenges, we have developed a platform that leverages agentic
    ```
 2. Navigate to the project directory (Frontend):
    ```bash
-   cd NGOLedger
-   cd fe
+   cd DonateETH/fe
    ```
 3. Install the necessary dependencies:
    ```bash
@@ -54,20 +53,38 @@ To address these challenges, we have developed a platform that leverages agentic
    ```
 4. Start the development server:
    ```bash
-   npm start dev
+   npm run dev
+   ```
+
+   If you're running the backend locally, set the frontend API base URL:
+   ```bash
+   cp .env.local.example .env.local
+   # ensure NEXT_PUBLIC_API_BASE_URL matches your backend (e.g. http://localhost:5003)
    ```
 5. Navigate to the project directory (Backend):
    ```bash
-   cd NGOLedger
-   cd donation-backend-bc
+   cd ../be
    ```
 6. Install the necessary dependencies:
    ```bash
    npm install
    ```
-7. Start the development server:
+7. Configure environment variables (Prisma + server):
    ```bash
-   node index.js
+   cp .env.example .env
+   # then set DATABASE_URL (PostgreSQL connection string)
+   ```
+8. Generate Prisma client:
+   ```bash
+   npm run prisma:generate
+   ```
+9. Apply migrations to your database:
+   ```bash
+   npm run prisma:migrate
+   ```
+10. Start the backend server:
+   ```bash
+   npm run dev
    ```
 
 ## Usage
@@ -85,6 +102,47 @@ To address these challenges, we have developed a platform that leverages agentic
 2. **Initiate Campaign**: Create a fundraising campaign detailing objectives, required funds, and milestones.
 3. **AI Validation**: Submit the campaign for AI-assisted validation to ensure compliance and authenticity.
 4. **Fund Withdrawal**: Upon reaching campaign milestones, request fund withdrawal. The smart contract will release the appropriate funds, and donors will be notified.
+
+## Admin Panel Architecture
+
+### Folder Structure
+
+```text
+be/
+  admin/
+    config.js
+    router.js
+    middleware/
+      auth.js
+    services/
+      blockchain.js
+    examples/
+      contract-interaction.js
+  prisma/
+    schema.prisma
+
+fe/
+  app/
+    admin/
+      login/page.tsx
+      page.tsx
+  lib/
+    admin-api.ts
+  middleware.ts
+```
+
+### Admin Features Included
+
+- JWT-based admin authentication with role checks (`/admin/auth/login`)
+- Protected admin routes (backend middleware + frontend route middleware)
+- Dashboard metrics: total ETH/INR, NGO count, active campaigns, recent transactions
+- NGO moderation: approve/reject/suspend/activate, campaign visibility per NGO
+- Donation tracking: donor wallet, NGO wallet, amount, transaction hash + Etherscan URL
+- Blockchain sync endpoint using Ethers.js event fetching (`/admin/transactions/sync`)
+- Document verification pipeline for IPFS CIDs with approve/reject actions
+- User management for donor/NGO users with block/unblock controls
+- Analytics endpoints for donation trends, top NGOs, and active donors
+- Security controls: input validation (Zod), rate limiting, helmet, duplicate tx prevention
 
 ## Future Scope
 

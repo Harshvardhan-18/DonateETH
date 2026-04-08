@@ -9,6 +9,7 @@ import { contract } from "@/lib/contract";
 import { useWriteContract } from "wagmi";
 import { CheckCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { assetUrl } from "@/lib/api";
 
 interface CampaignCardProps {
   campaign: {
@@ -25,8 +26,7 @@ interface CampaignCardProps {
 
 export function CampaignCard({ campaign }: CampaignCardProps) {
   const progress = (campaign.raised / campaign.goal) * 100;
-  // console.log(campaign.imageUrl);
-  const img1 = campaign.imageUrl.split("/")[2];
+  const campaignImageSrc = assetUrl(campaign.imageUrl);
   // console.log(`D:/100xdev/distriburted-donation/donation_bk/uploads/${img1}`);
   // D:/100xdev/distriburted-donation/donation_bk/uploads/imageUrl-1742050466822-930851744.png
 
@@ -45,7 +45,7 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
             <div className="relative aspect-video overflow-hidden rounded-lg">
             <img
                     //src=`D:\100xdev\distriburted-donation\donation_bk\uploads ${img1}`;
-                    src={`https://ngoledger.onrender.com/uploads/${img1}`}
+                src={campaignImageSrc}
                     alt="External Image"
                     // unoptimized
                     width={300}
@@ -90,7 +90,7 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
 
 export function CampaignCard2({ campaign }: CampaignCardProps) {
   const progress = (campaign.raised / campaign.goal) * 100;
-  const img1 = campaign.imageUrl.split("/")[2];
+  const campaignImageSrc = assetUrl(campaign.imageUrl);
 
   const { data: hash, writeContract } = useWriteContract();
 
@@ -131,7 +131,7 @@ export function CampaignCard2({ campaign }: CampaignCardProps) {
           <div className="p-6 pt-6">
             <div className="relative aspect-video overflow-hidden rounded-lg">
               <img
-                src={`https://ngoledger.onrender.com/uploads/${img1}`}
+                src={campaignImageSrc}
                 alt="Campaign Image"
                 width={300}
                 height={200}

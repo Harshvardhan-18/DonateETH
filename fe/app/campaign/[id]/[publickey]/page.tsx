@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Image from "next/image";
 import { Navbar } from "@/components/navbar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -19,6 +18,7 @@ import axios from "axios";
 import { useWriteContract } from "wagmi";
 import { parseEther } from "viem"; // ✅ Converts ETH to Wei
 import { contract } from "../../../../lib/contract";
+import { apiUrl, assetUrl } from "@/lib/api";
 
 export default function CampaignPage() {
   const router = useRouter();
@@ -33,13 +33,13 @@ export default function CampaignPage() {
   useEffect(() => {
     async function fetchCampaign() {
       try {
-        const response = await axios.get(`https://ngoledger.onrender.com/campaigns/${id}`);
+        const response = await axios.get(apiUrl(`/campaigns/${id}`));
         if (response.data) {
           console.log(response.data);
           setCampaignData(response.data);
         }
 
-        const response2 = await axios.get(`https://ngoledger.onrender.com/milestones`);
+        const response2 = await axios.get(apiUrl("/milestones"));
         if (response2.data) {
           setMilestones(response2.data);
         }
@@ -70,7 +70,7 @@ export default function CampaignPage() {
         ],
       });
 
-      const response = await axios.post(`https://ngoledger.onrender.com/campaigns/${campaignData.id}/updateRaised`, {amount: donationAmount}, {
+      const response = await axios.post(apiUrl(`/campaigns/${campaignData.id}/updateRaised`), {amount: donationAmount}, {
           headers: {  
             'Content-Type': 'application/json'
           }
@@ -87,7 +87,7 @@ export default function CampaignPage() {
   }
 
   const progress = (parseFloat(campaignData.raised || "0.0") / parseFloat(campaignData.goal || "1")) * 100;
-  const img1 = campaignData.imageUrl.split("/")[2];
+  const campaignImageSrc = assetUrl(campaignData.imageUrl);
   
   return (
     <main className="min-h-screen bg-background">
@@ -97,11 +97,10 @@ export default function CampaignPage() {
           <div className="lg:col-span-2 pl-12 mb-20">
             <div className="p-4 pl-0 rounded-lg shadow-md">
               <div className="relative aspect-video overflow-hidden rounded-lg">
-                <Image
-                  src={`https://ngoledger.onrender.com/uploads/${img1}`}
+                <img
+                  src={campaignImageSrc}
                   alt={campaignData.title}
-                  fill
-                  className="object-cover"
+                  className="h-full w-full object-cover"
                 />
               </div>
             </div>

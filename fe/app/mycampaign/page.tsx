@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import { CampaignCard, CampaignCard2 } from "@/components/campaign-card";
 import { motion } from "framer-motion";
 import { useAccount, useConnect } from "wagmi";
+import { apiUrl } from "@/lib/api";
 
 export default function CampaignsPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -22,6 +23,8 @@ export default function CampaignsPage() {
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showMyCampaigns, setShowMyCampaigns] = useState(false);
+  const [ngoAllowed, setNgoAllowed] = useState(false);
+  const [isNgoChecking, setIsNgoChecking] = useState(false);
 
   // Using wagmi hooks for wallet connection
   const { address, isConnected } = useAccount();
@@ -30,7 +33,7 @@ export default function CampaignsPage() {
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
-        const response = await fetch("https://ngoledger.onrender.com/campaigns");
+        const response = await fetch(apiUrl("/campaigns"));
         if (!response.ok) {
           throw new Error("Failed to fetch campaigns");
         }
@@ -43,12 +46,37 @@ export default function CampaignsPage() {
       }
     };
     fetchCampaigns();
-
-    // Set showMyCampaigns to true if wallet is connected
-    if (isConnected) {
-      setShowMyCampaigns(true);
-    }
   }, [isConnected]);
+
+  useEffect(() => {
+    const checkNgo = async () => {
+      // Wagmi can briefly report `isConnected=false` during reconnect.
+      // If we already have an address, we can still check approval.
+      if (!address) {
+        setNgoAllowed(false);
+        setShowMyCampaigns(false);
+        return;
+      }
+
+      setIsNgoChecking(true);
+      try {
+        const walletAddress = address.toLowerCase();
+        const res = await fetch(apiUrl(`/ngos/me?walletAddress=${walletAddress}`), { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to check NGO status");
+        const data = await res.json();
+        const allowed = Boolean(data.allowed);
+        setNgoAllowed(allowed);
+        setShowMyCampaigns(allowed);
+      } catch {
+        setNgoAllowed(false);
+        setShowMyCampaigns(false);
+      } finally {
+        setIsNgoChecking(false);
+      }
+    };
+
+    checkNgo();
+  }, [address]);
 
   const connectWallet = () => {
     if (connectors.length > 0) {
@@ -65,8 +93,10 @@ export default function CampaignsPage() {
                          campaign.description?.toLowerCase().includes(searchQuery.toLowerCase());
     
     // Only show campaigns matching the wallet address if showMyCampaigns is true
-    const matchesWallet = !showMyCampaigns || 
-                         (isConnected && campaign.walletaddress?.toLowerCase() === address?.toLowerCase());
+    const connectedWallet = address?.toLowerCase();
+    const matchesWallet =
+      !showMyCampaigns ||
+      (Boolean(connectedWallet) && campaign.walletaddress?.toLowerCase() === connectedWallet);
     
     return matchesSearch && matchesWallet;
   });
@@ -91,12 +121,26 @@ export default function CampaignsPage() {
             transition={{ duration: 1, delay: 0.3 }}
             className="mt-2 text-lg text-muted-foreground"
           >
-            {isConnected 
-              ? showMyCampaigns 
-                ? "View and manage your active donation campaigns." 
+            {isConnected
+              ? ngoAllowed
+                ? showMyCampaigns
+                  ? "View and manage your active donation campaigns."
+                  : "Browse all available donation campaigns."
                 : "Browse all available donation campaigns."
               : "Connect your wallet to view your campaigns."}
           </motion.p>
+
+          {isConnected && !isNgoChecking && !ngoAllowed ? (
+            <motion.p
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="mt-2 text-sm text-yellow-700"
+            >
+              Only registered and approved NGOs can manage “My Campaigns”. Please register at{" "}
+              <a className="underline" href="/ngos">/ngos</a>.
+            </motion.p>
+          ) : null}
         </div>
 
         {/* Search, Filter, and Wallet Section */}
@@ -132,6 +176,7 @@ export default function CampaignsPage() {
               </Select>
               <Button 
                 variant={showMyCampaigns ? "default" : "outline"} 
+                disabled={!ngoAllowed || isNgoChecking}
                 onClick={() => setShowMyCampaigns(true)}
                 className="w-[180px]"
               >
@@ -140,6 +185,7 @@ export default function CampaignsPage() {
               <Button 
                 variant={!showMyCampaigns ? "default" : "outline"} 
                 onClick={() => setShowMyCampaigns(false)}
+                disabled={isNgoChecking}
                 className="w-[180px]"
               >
                 All Campaigns
