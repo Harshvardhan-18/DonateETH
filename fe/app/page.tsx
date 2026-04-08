@@ -4,8 +4,44 @@ import { Navbar } from "@/components/navbar";
 import { ArrowRight, Shield, LineChart, Vote } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { apiUrl, assetUrl } from "@/lib/api";
+
+type Campaign = {
+  id: string;
+  walletaddress?: string | null;
+  title?: string | null;
+  description?: string | null;
+  imageUrl?: string | null;
+  raised?: string | number | null;
+  goal?: string | number | null;
+  daysLeft?: number | null;
+  isActive?: boolean | null;
+};
 
 export default function Home() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+
+  useEffect(() => {
+    const fetchCampaigns = async () => {
+      try {
+        const response = await fetch(apiUrl("/campaigns"), { cache: "no-store" });
+        if (!response.ok) throw new Error("Failed to fetch campaigns");
+        const data = await response.json();
+        setCampaigns(Array.isArray(data) ? data : []);
+      } catch {
+        setCampaigns([]);
+      }
+    };
+    fetchCampaigns();
+  }, []);
+
+  const activeCampaigns = useMemo(() => {
+    return campaigns
+      .filter((campaign) => campaign?.isActive !== false)
+      .slice(0, 3);
+  }, [campaigns]);
+
   return (
     <main className="flex min-h-screen flex-col">
       <Navbar />
@@ -125,19 +161,48 @@ export default function Home() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">
-          {/* Campaign cards will be dynamically populated here */}
-          {/* This is just a placeholder for the structure */}
-          <div className="rounded-lg border bg-card p-4">
-            <div className="aspect-video overflow-hidden rounded-md bg-muted" />
-            <h3 className="mt-4 font-semibold">Campaign Title</h3>
-            <div className="mt-2 h-2 rounded-full bg-secondary">
-              <div className="h-full w-1/2 rounded-full bg-primary" />
+          {activeCampaigns.map((campaign) => {
+            const raised = Number(campaign?.raised ?? 0);
+            const goal = Number(campaign?.goal ?? 0);
+            const progress = goal > 0 ? Math.min(100, Math.max(0, (raised / goal) * 100)) : 0;
+            return (
+              <div key={campaign.id} className="rounded-lg border bg-card p-4">
+                <div className="aspect-video overflow-hidden rounded-md bg-muted">
+                  {campaign.imageUrl ? (
+                    <img
+                      src={assetUrl(campaign.imageUrl)}
+                      alt={campaign.title || "Campaign image"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : null}
+                </div>
+                <h3 className="mt-4 font-semibold line-clamp-1">{campaign.title || "Untitled Campaign"}</h3>
+                <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{campaign.description || "No description available."}</p>
+                <div className="mt-2 h-2 rounded-full bg-secondary">
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
+                </div>
+                <div className="mt-4 flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    ₹{Number.isFinite(raised) ? raised.toLocaleString() : "0"} raised
+                  </span>
+                  <span className="font-medium">{Math.round(progress)}%</span>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {campaign.daysLeft ?? 0} days left
+                </div>
+                <div className="mt-4">
+                  <Link href={`/campaign/${campaign.id}/${campaign.walletaddress || "unknown"}`}>
+                    <Button variant="outline" className="w-full">View Campaign</Button>
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+          {activeCampaigns.length === 0 ? (
+            <div className="rounded-lg border bg-card p-4 md:col-span-3 text-sm text-muted-foreground">
+              No active campaigns to show yet.
             </div>
-            <div className="mt-4 flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">₹50,000 raised</span>
-              <span className="font-medium">50%</span>
-            </div>
-          </div>
+          ) : null}
         </div>
       </section>
     </main>

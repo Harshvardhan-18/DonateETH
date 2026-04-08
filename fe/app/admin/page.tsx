@@ -55,7 +55,7 @@ export default function AdminDashboardPage() {
       setErrorMessage("Admin data failed to load. Tabs work, but data actions may fail until backend recovers.");
     });
     const poll = setInterval(() => {
-      adminGet("/transactions", jwt).then(setTransactions).catch(() => undefined);
+      loadData(jwt).catch(() => undefined);
     }, 15000);
     return () => clearInterval(poll);
   }, [router]);
@@ -73,6 +73,31 @@ export default function AdminDashboardPage() {
       ],
     }),
     [analytics]
+  );
+
+  const approvedNgos = useMemo(
+    () => ngos.filter((ngo) => ["APPROVED", "ACTIVE"].includes(String(ngo?.status))),
+    [ngos]
+  );
+  const pendingNgos = useMemo(
+    () => ngos.filter((ngo) => String(ngo?.status) === "PENDING"),
+    [ngos]
+  );
+  const otherNgos = useMemo(
+    () => ngos.filter((ngo) => !["APPROVED", "ACTIVE", "PENDING"].includes(String(ngo?.status))),
+    [ngos]
+  );
+  const approvedDocuments = useMemo(
+    () => documents.filter((doc) => String(doc?.status) === "APPROVED"),
+    [documents]
+  );
+  const pendingDocuments = useMemo(
+    () => documents.filter((doc) => String(doc?.status) === "PENDING"),
+    [documents]
+  );
+  const rejectedDocuments = useMemo(
+    () => documents.filter((doc) => String(doc?.status) === "REJECTED"),
+    [documents]
   );
 
   const logout = () => {
@@ -119,7 +144,7 @@ export default function AdminDashboardPage() {
               <div className="space-y-2">
                 {overview?.recentTransactions?.map((tx: any) => (
                   <div key={tx.id} className="text-sm border-b pb-2">
-                    {tx.donorWallet} {"->"} {tx.ngoWallet} | {tx.amountEth} ETH | <a href={tx.etherscanUrl} target="_blank" rel="noreferrer" className="underline">Tx</a>
+                    Donor: {tx.donorName || tx.donorWallet} {"->"} NGO: {tx.ngoWallet} | {tx.amountEth} ETH {tx.isSample ? "(sample)" : ""} | <a href={tx.etherscanUrl} target="_blank" rel="noreferrer" className="underline">Tx</a>
                   </div>
                 ))}
               </div>
@@ -127,22 +152,69 @@ export default function AdminDashboardPage() {
           </TabsContent>
 
           <TabsContent value="ngos">
-            <div className="space-y-3">
-              {ngos.map((ngo) => (
-                <Card key={ngo.id} className="p-4 flex justify-between items-start">
-                  <div>
-                    <p className="font-semibold">{ngo.name}</p>
-                    <p className="text-sm text-muted-foreground">{ngo.user?.email}</p>
-                    <p className="text-sm">Campaigns: {ngo.campaigns?.length ?? 0}</p>
-                    <p className="text-sm">Status: {ngo.status}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => adminPatch(`/ngos/${ngo.id}/status`, token, { status: "APPROVED" }).then(() => loadData(token))}>Approve</Button>
-                    <Button size="sm" variant="outline" onClick={() => adminPatch(`/ngos/${ngo.id}/status`, token, { status: "SUSPENDED" }).then(() => loadData(token))}>Suspend</Button>
-                    <Button size="sm" variant="destructive" onClick={() => adminPatch(`/ngos/${ngo.id}/status`, token, { status: "REJECTED" }).then(() => loadData(token))}>Reject</Button>
-                  </div>
-                </Card>
-              ))}
+            <div className="space-y-6">
+              <section className="space-y-3">
+                <h3 className="text-lg font-semibold">Approved</h3>
+                {approvedNgos.map((ngo) => (
+                  <Card key={ngo.id} className="p-4 flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold">{ngo.name}</p>
+                      <p className="text-sm text-muted-foreground">{ngo.user?.email}</p>
+                      <p className="text-sm">Campaigns: {ngo.campaigns?.length ?? 0}</p>
+                      <p className="text-sm">Status: {ngo.status}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => adminPatch(`/ngos/${ngo.id}/status`, token, { status: "SUSPENDED" }).then(() => loadData(token))}>Suspend</Button>
+                      <Button size="sm" variant="destructive" onClick={() => adminPatch(`/ngos/${ngo.id}/status`, token, { status: "REJECTED" }).then(() => loadData(token))}>Reject</Button>
+                    </div>
+                  </Card>
+                ))}
+                {approvedNgos.length === 0 ? (
+                  <Card className="p-4 text-sm text-muted-foreground">No approved NGOs.</Card>
+                ) : null}
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-lg font-semibold">Pending Approval</h3>
+                {pendingNgos.map((ngo) => (
+                  <Card key={ngo.id} className="p-4 flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold">{ngo.name}</p>
+                      <p className="text-sm text-muted-foreground">{ngo.user?.email}</p>
+                      <p className="text-sm">Campaigns: {ngo.campaigns?.length ?? 0}</p>
+                      <p className="text-sm">Status: {ngo.status}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => adminPatch(`/ngos/${ngo.id}/status`, token, { status: "APPROVED" }).then(() => loadData(token))}>Approve</Button>
+                      <Button size="sm" variant="outline" onClick={() => adminPatch(`/ngos/${ngo.id}/status`, token, { status: "SUSPENDED" }).then(() => loadData(token))}>Suspend</Button>
+                      <Button size="sm" variant="destructive" onClick={() => adminPatch(`/ngos/${ngo.id}/status`, token, { status: "REJECTED" }).then(() => loadData(token))}>Reject</Button>
+                    </div>
+                  </Card>
+                ))}
+                {pendingNgos.length === 0 ? (
+                  <Card className="p-4 text-sm text-muted-foreground">No pending NGOs.</Card>
+                ) : null}
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-lg font-semibold">Suspended / Rejected</h3>
+                {otherNgos.map((ngo) => (
+                  <Card key={ngo.id} className="p-4 flex justify-between items-start">
+                    <div>
+                      <p className="font-semibold">{ngo.name}</p>
+                      <p className="text-sm text-muted-foreground">{ngo.user?.email}</p>
+                      <p className="text-sm">Campaigns: {ngo.campaigns?.length ?? 0}</p>
+                      <p className="text-sm">Status: {ngo.status}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => adminPatch(`/ngos/${ngo.id}/status`, token, { status: "APPROVED" }).then(() => loadData(token))}>Approve</Button>
+                    </div>
+                  </Card>
+                ))}
+                {otherNgos.length === 0 ? (
+                  <Card className="p-4 text-sm text-muted-foreground">No suspended/rejected NGOs.</Card>
+                ) : null}
+              </section>
             </div>
           </TabsContent>
 
@@ -151,7 +223,7 @@ export default function AdminDashboardPage() {
               <div className="space-y-2">
                 {transactions.map((tx) => (
                   <div key={tx.id} className="text-sm border-b pb-2">
-                    Donor: {tx.donorWallet} | NGO: {tx.ngoWallet} | Amount: {tx.amountEth} ETH |{" "}
+                    Donor: {tx.donorName || tx.donorWallet} | NGO: {tx.ngoWallet} | Amount: {tx.amountEth} ETH {tx.isSample ? "(sample)" : ""} |{" "}
                     <a href={tx.etherscanUrl} target="_blank" rel="noreferrer" className="underline">Hash</a>
                   </div>
                 ))}
@@ -160,46 +232,118 @@ export default function AdminDashboardPage() {
           </TabsContent>
 
           <TabsContent value="documents">
-            <div className="space-y-3">
-              {documents.map((doc) => (
-                <Card key={doc.id} className="p-4 flex justify-between items-center">
-                  <div>
-                    <p className="font-medium">Campaign: {doc.campaign?.title ?? doc.campaignId}</p>
-                    <p className="text-sm">Type: {doc.type}</p>
-                    <p className="text-sm">Status: {doc.status}</p>
-                    <a className="text-sm underline" href={doc.previewUrl} target="_blank" rel="noreferrer">Open document</a>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        adminPatch("/documents/verify", token, {
-                          campaignId: doc.campaignId,
-                          docType: doc.type,
-                          documentUrl: doc.sourceUrl,
-                          status: "APPROVED",
-                        }).then(() => loadData(token))
-                      }
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() =>
-                        adminPatch("/documents/verify", token, {
-                          campaignId: doc.campaignId,
-                          docType: doc.type,
-                          documentUrl: doc.sourceUrl,
-                          status: "REJECTED",
-                        }).then(() => loadData(token))
-                      }
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                </Card>
-              ))}
+            <div className="space-y-6">
+              <section className="space-y-3">
+                <h3 className="text-lg font-semibold">Pending Verification</h3>
+                {pendingDocuments.map((doc) => (
+                  <Card key={doc.id} className="p-4 flex justify-between items-center">
+                    <div>
+                      <p className="font-medium">Campaign: {doc.campaign?.title ?? doc.campaignId}</p>
+                      <p className="text-sm">Type: {doc.type}</p>
+                      <p className="text-sm">Status: {doc.status}</p>
+                      <a className="text-sm underline" href={doc.previewUrl} target="_blank" rel="noreferrer">Open document</a>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          adminPatch("/documents/verify", token, {
+                            campaignId: doc.campaignId,
+                            docType: doc.type,
+                            documentUrl: doc.sourceUrl,
+                            status: "APPROVED",
+                          }).then(() => loadData(token))
+                        }
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() =>
+                          adminPatch("/documents/verify", token, {
+                            campaignId: doc.campaignId,
+                            docType: doc.type,
+                            documentUrl: doc.sourceUrl,
+                            status: "REJECTED",
+                          }).then(() => loadData(token))
+                        }
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+                {pendingDocuments.length === 0 ? (
+                  <Card className="p-4 text-sm text-muted-foreground">No pending documents.</Card>
+                ) : null}
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-lg font-semibold">Approved</h3>
+                {approvedDocuments.map((doc) => (
+                  <Card key={doc.id} className="p-4 flex justify-between items-center">
+                    <div>
+                      <p className="font-medium">Campaign: {doc.campaign?.title ?? doc.campaignId}</p>
+                      <p className="text-sm">Type: {doc.type}</p>
+                      <p className="text-sm">Status: {doc.status}</p>
+                      <a className="text-sm underline" href={doc.previewUrl} target="_blank" rel="noreferrer">Open document</a>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() =>
+                          adminPatch("/documents/verify", token, {
+                            campaignId: doc.campaignId,
+                            docType: doc.type,
+                            documentUrl: doc.sourceUrl,
+                            status: "REJECTED",
+                          }).then(() => loadData(token))
+                        }
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+                {approvedDocuments.length === 0 ? (
+                  <Card className="p-4 text-sm text-muted-foreground">No approved documents.</Card>
+                ) : null}
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-lg font-semibold">Rejected</h3>
+                {rejectedDocuments.map((doc) => (
+                  <Card key={doc.id} className="p-4 flex justify-between items-center">
+                    <div>
+                      <p className="font-medium">Campaign: {doc.campaign?.title ?? doc.campaignId}</p>
+                      <p className="text-sm">Type: {doc.type}</p>
+                      <p className="text-sm">Status: {doc.status}</p>
+                      <a className="text-sm underline" href={doc.previewUrl} target="_blank" rel="noreferrer">Open document</a>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          adminPatch("/documents/verify", token, {
+                            campaignId: doc.campaignId,
+                            docType: doc.type,
+                            documentUrl: doc.sourceUrl,
+                            status: "APPROVED",
+                          }).then(() => loadData(token))
+                        }
+                      >
+                        Approve
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+                {rejectedDocuments.length === 0 ? (
+                  <Card className="p-4 text-sm text-muted-foreground">No rejected documents.</Card>
+                ) : null}
+              </section>
+
               {documents.length === 0 ? (
                 <Card className="p-4 text-sm text-muted-foreground">
                   No campaign documents found yet. Upload certificate/supporting docs while creating campaigns.
@@ -217,13 +361,16 @@ export default function AdminDashboardPage() {
               <Card className="p-4">
                 <h4 className="font-medium mb-2">Top NGOs by Funds</h4>
                 {analytics?.topNgos?.map((ngo: any) => (
-                  <p key={ngo.ngoWallet} className="text-sm">{ngo.ngoWallet}: {Number(ngo._sum.amountEth || 0).toFixed(4)} ETH</p>
+                  <p key={ngo.ngoWallet} className="text-sm">{ngo.ngoWallet}: {Number(ngo.totalEth || ngo?._sum?.amountEth || 0).toFixed(4)} ETH</p>
                 ))}
               </Card>
               <Card className="p-4">
                 <h4 className="font-medium mb-2">Most Active Donors</h4>
                 {analytics?.activeDonors?.map((donor: any) => (
-                  <p key={donor.donorWallet} className="text-sm">{donor.donorWallet}: {donor._count.donorWallet} donations</p>
+                  <p key={donor.donorWallet} className="text-sm">
+                    {(donor.donorName || donor.donorWallet)}: {donor.donationCount || donor?._count?.donorWallet || 0} donations
+                    {donor.totalEth ? ` (${Number(donor.totalEth).toFixed(4)} ETH)` : ""}
+                  </p>
                 ))}
               </Card>
             </div>

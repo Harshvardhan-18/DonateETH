@@ -28,6 +28,39 @@ const verifyDocumentSchema = z.object({
   status: z.enum(["APPROVED", "REJECTED"]),
 });
 
+const SAMPLE_TRANSACTIONS = [
+  {
+    id: "sample-tx-1",
+    donorName: "Aarav Mehta",
+    donorWallet: "0xA1b2c3D4e5F60718293aBcD4Ef56789012345678",
+    ngoWallet: "0x3E8B5Ecb9Ba4A3a71335f8C61b9Ff2FFA1AB6Bdd",
+    amountEth: "0.1250",
+    txHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+    createdAt: "2026-04-08T09:30:00.000Z",
+    isSample: true,
+  },
+  {
+    id: "sample-tx-2",
+    donorName: "Isha Verma",
+    donorWallet: "0x9aBcDef01234567890abCDef1234567890aBCDEF",
+    ngoWallet: "0x3E8B5Ecb9Ba4A3a71335f8C61b9Ff2FFA1AB6Bdd",
+    amountEth: "0.3200",
+    txHash: "0x2222222222222222222222222222222222222222222222222222222222222222",
+    createdAt: "2026-04-08T08:10:00.000Z",
+    isSample: true,
+  },
+  {
+    id: "sample-tx-3",
+    donorName: "Rohan Kulkarni",
+    donorWallet: "0x1234567890abcdef1234567890ABCDEF12345678",
+    ngoWallet: "0x3E8B5Ecb9Ba4A3a71335f8C61b9Ff2FFA1AB6Bdd",
+    amountEth: "0.0750",
+    txHash: "0x3333333333333333333333333333333333333333333333333333333333333333",
+    createdAt: "2026-04-07T18:45:00.000Z",
+    isSample: true,
+  },
+];
+
 export function buildAdminRouter(prisma) {
   const router = express.Router();
   const asyncHandler =
@@ -96,6 +129,17 @@ export function buildAdminRouter(prisma) {
       orderBy: { createdAt: "desc" },
       take: 10,
     });
+    const recentTransactions = [
+      ...SAMPLE_TRANSACTIONS,
+      ...transactions.map((tx) => ({
+        ...tx,
+        donorName: null,
+        isSample: false,
+      })),
+    ]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 10)
+      .map((tx) => ({ ...tx, etherscanUrl: etherscanTxUrl(tx.txHash) }));
     const ngos = await prisma.nGOProfile.count();
     const campaigns = await prisma.campaign.count();
 
@@ -109,7 +153,7 @@ export function buildAdminRouter(prisma) {
         totalNgos: ngos,
         totalCampaignsActive: campaigns,
       },
-      recentTransactions: transactions.map((tx) => ({ ...tx, etherscanUrl: etherscanTxUrl(tx.txHash) })),
+      recentTransactions,
     });
   }));
 
@@ -134,7 +178,17 @@ export function buildAdminRouter(prisma) {
 
   router.get("/transactions", asyncHandler(async (_req, res) => {
     const txs = await prisma.donationTransaction.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
-    return res.json(txs.map((tx) => ({ ...tx, etherscanUrl: etherscanTxUrl(tx.txHash) })));
+    const merged = [
+      ...SAMPLE_TRANSACTIONS,
+      ...txs.map((tx) => ({
+        ...tx,
+        donorName: null,
+        isSample: false,
+      })),
+    ]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map((tx) => ({ ...tx, etherscanUrl: etherscanTxUrl(tx.txHash) }));
+    return res.json(merged);
   }));
 
   router.post("/transactions/sync", asyncHandler(async (_req, res) => {
@@ -272,26 +326,60 @@ export function buildAdminRouter(prisma) {
 
   router.get("/analytics", asyncHandler(async (_req, res) => {
     const txs = await prisma.donationTransaction.findMany({ orderBy: { createdAt: "asc" } });
+    const allTxs = [
+      ...SAMPLE_TRANSACTIONS,
+      ...txs.map((tx) => ({
+        ...tx,
+        donorName: null,
+        isSample: false,
+      })),
+    ];
+
     const byDay = {};
-    txs.forEach((tx) => {
-      const key = new Date(tx.createdAt).toISOString().slice(0, 10);
-      byDay[key] = (byDay[key] || 0) + Number(tx.amountEth || 0);
-    });
-    const donationTrend = Object.entries(byDay).map(([date, amount]) => ({ date, amount }));
+    const byNgo = {};
+    const byDonor = {};
 
-    const topNgos = await prisma.donationTransaction.groupBy({
-      by: ["ngoWallet"],
-      _sum: { amountEth: true },
-      orderBy: { _sum: { amountEth: "desc" } },
-      take: 5,
+    allTxs.forEach((tx) => {
+      const dateKey = new Date(tx.createdAt).toISOString().slice(0, 10);
+      const amount = Number(tx.amountEth || 0);
+      byDay[dateKey] = (byDay[dateKey] || 0) + amount;
+
+      if (tx.ngoWallet) {
+        byNgo[tx.ngoWallet] = (byNgo[tx.ngoWallet] || 0) + amount;
+      }
+
+      if (tx.donorWallet) {
+        if (!byDonor[tx.donorWallet]) {
+          byDonor[tx.donorWallet] = {
+            donorWallet: tx.donorWallet,
+            donorName: tx.donorName || null,
+            donationCount: 0,
+            totalEth: 0,
+          };
+        }
+        byDonor[tx.donorWallet].donationCount += 1;
+        byDonor[tx.donorWallet].totalEth += amount;
+        if (!byDonor[tx.donorWallet].donorName && tx.donorName) {
+          byDonor[tx.donorWallet].donorName = tx.donorName;
+        }
+      }
     });
 
-    const activeDonors = await prisma.donationTransaction.groupBy({
-      by: ["donorWallet"],
-      _count: { donorWallet: true },
-      orderBy: { _count: { donorWallet: "desc" } },
-      take: 5,
-    });
+    const donationTrend = Object.entries(byDay)
+      .map(([date, amount]) => ({ date, amount }))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+    const topNgos = Object.entries(byNgo)
+      .map(([ngoWallet, totalEth]) => ({ ngoWallet, totalEth }))
+      .sort((a, b) => Number(b.totalEth) - Number(a.totalEth))
+      .slice(0, 5);
+
+    const activeDonors = Object.values(byDonor)
+      .sort((a, b) => {
+        if (b.donationCount !== a.donationCount) return b.donationCount - a.donationCount;
+        return b.totalEth - a.totalEth;
+      })
+      .slice(0, 5);
 
     return res.json({ donationTrend, topNgos, activeDonors });
   }));

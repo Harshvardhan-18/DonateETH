@@ -27,8 +27,9 @@ export default function CampaignsPage() {
   const [isNgoChecking, setIsNgoChecking] = useState(false);
 
   // Using wagmi hooks for wallet connection
-  const { address, isConnected } = useAccount();
+  const { address } = useAccount();
   const { connectors, connect } = useConnect();
+  const hasWallet = Boolean(address);
 
   useEffect(() => {
     const fetchCampaigns = async () => {
@@ -46,7 +47,7 @@ export default function CampaignsPage() {
       }
     };
     fetchCampaigns();
-  }, [isConnected]);
+  }, [address]);
 
   useEffect(() => {
     const checkNgo = async () => {
@@ -121,7 +122,7 @@ export default function CampaignsPage() {
             transition={{ duration: 1, delay: 0.3 }}
             className="mt-2 text-lg text-muted-foreground"
           >
-            {isConnected
+            {hasWallet
               ? ngoAllowed
                 ? showMyCampaigns
                   ? "View and manage your active donation campaigns."
@@ -130,7 +131,7 @@ export default function CampaignsPage() {
               : "Connect your wallet to view your campaigns."}
           </motion.p>
 
-          {isConnected && !isNgoChecking && !ngoAllowed ? (
+          {hasWallet && !isNgoChecking && !ngoAllowed ? (
             <motion.p
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -145,7 +146,7 @@ export default function CampaignsPage() {
 
         {/* Search, Filter, and Wallet Section */}
         <div className="flex w-full justify-center">
-          {!isConnected ? (
+          {!hasWallet ? (
             <div className="mt-8">
               <Button onClick={connectWallet} className="gap-2">
                 Connect Wallet
@@ -197,7 +198,7 @@ export default function CampaignsPage() {
 
       {/* Full-width Campaigns Grid */}
       <div className="w-full px-20 mt-8">
-        {!isConnected ? (
+        {!hasWallet ? (
           <div className="text-center py-12">
             <p className="text-lg text-muted-foreground">
               Connect your wallet to view your campaigns
@@ -206,7 +207,11 @@ export default function CampaignsPage() {
         ) : filteredCampaigns.length > 0 ? (
           <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
             {filteredCampaigns.map((campaign: any) => (
-              <CampaignCard2 key={campaign?.id} campaign={campaign} />
+              ngoAllowed && showMyCampaigns ? (
+                <CampaignCard2 key={campaign?.id} campaign={campaign} />
+              ) : (
+                <CampaignCard key={campaign?.id} campaign={campaign} />
+              )
             ))}
           </div>
         ) : (

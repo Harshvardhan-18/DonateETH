@@ -78,7 +78,7 @@
         checkNgo();
       }, [address]);
 
-      const canCreate = Boolean(isConnected && ngoAllowed);
+      const canCreate = Boolean(address && ngoAllowed);
 
       const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -128,7 +128,7 @@
         formData.append("contactPhone", contactPhone);
         
         // Add wallet address if connected
-        if (isConnected && address) {
+        if (address) {
           formData.append("walletaddress", address);
         }
         

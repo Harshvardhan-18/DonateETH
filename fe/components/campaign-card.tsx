@@ -6,10 +6,11 @@ import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { contract } from "@/lib/contract";
-import { useWriteContract } from "wagmi";
+import { useAccount, useWriteContract } from "wagmi";
 import { CheckCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { assetUrl } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 interface CampaignCardProps {
   campaign: {
@@ -27,10 +28,36 @@ interface CampaignCardProps {
 export function CampaignCard({ campaign }: CampaignCardProps) {
   const progress = (campaign.raised / campaign.goal) * 100;
   const campaignImageSrc = assetUrl(campaign.imageUrl);
+  const router = useRouter();
+  const { address } = useAccount();
+  const { writeContract } = useWriteContract();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const isOwner =
+    Boolean(address) &&
+    String(address).toLowerCase() === String(campaign.walletaddress || "").toLowerCase();
   // console.log(`D:/100xdev/distriburted-donation/donation_bk/uploads/${img1}`);
   // D:/100xdev/distriburted-donation/donation_bk/uploads/imageUrl-1742050466822-930851744.png
 
   console.log(campaign.walletaddress)
+
+  const handleWithdraw = async () => {
+    try {
+      setIsLoading(true);
+      setIsSuccess(false);
+      writeContract({
+        address: contract.address as `0x${string}`,
+        abi: contract.abi,
+        functionName: "withdraw",
+        args: [BigInt(Math.round(0.0001 * 1e18))],
+      });
+      setIsSuccess(true);
+    } catch (err) {
+      console.error("Withdrawal failed:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <motion.div
@@ -38,6 +65,8 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
       whileInView={{ opacity: 1, y: 0 }} // animate to full visibility
       viewport={{ once: true, amount: 0.3 }} // trigger when 30% of the card is visible
       transition={{ duration: 0.6, ease: "easeInOut" }}
+      onClick={() => router.push(`/campaign/${campaign.id}/${campaign.walletaddress}`)}
+      className="cursor-pointer"
     >
       <Card className="overflow-hidden flex flex-col h-full pb-5">
         <CardHeader className="p-0">
@@ -75,13 +104,39 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
         </CardContent>
 
         {/* Keep the button aligned at the bottom */}
-        <CardFooter className="p-4 pt-0">
-          <Link
-            href={`/campaign/${campaign.id}/${campaign.walletaddress}`}
-            className="w-full flex justify-center"
-          >
-            <Button className="w-80 hover:bg-green-200">Donate Now</Button>
-          </Link>
+        <CardFooter className="p-4 pt-0 flex flex-col items-center">
+          {isSuccess ? (
+            <div className="flex items-center text-green-500 text-sm mb-2">
+              <CheckCircle className="h-5 w-5 mr-1" />
+              Withdrawal Successful!
+            </div>
+          ) : null}
+          {isOwner ? (
+            <Button
+              className="w-80 hover:bg-green-200 flex items-center justify-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleWithdraw();
+              }}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" /> Withdrawing...
+                </>
+              ) : (
+                "Withdraw"
+              )}
+            </Button>
+          ) : (
+            <Link
+              href={`/campaign/${campaign.id}/${campaign.walletaddress}`}
+              className="w-full flex justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Button className="w-80 hover:bg-green-200">Donate Now</Button>
+            </Link>
+          )}
         </CardFooter>
       </Card>
     </motion.div>
@@ -91,11 +146,16 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
 export function CampaignCard2({ campaign }: CampaignCardProps) {
   const progress = (campaign.raised / campaign.goal) * 100;
   const campaignImageSrc = assetUrl(campaign.imageUrl);
+  const router = useRouter();
+  const { address } = useAccount();
 
   const { data: hash, writeContract } = useWriteContract();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const isOwner =
+    Boolean(address) &&
+    String(address).toLowerCase() === String(campaign.walletaddress || "").toLowerCase();
 
   const handleWithdraw = async () => {
     try {
@@ -125,6 +185,8 @@ export function CampaignCard2({ campaign }: CampaignCardProps) {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.3 }}
       transition={{ duration: 0.6, ease: "easeInOut" }}
+      onClick={() => router.push(`/campaign/${campaign.id}/${campaign.walletaddress}`)}
+      className="cursor-pointer"
     >
       <Card className="overflow-hidden flex flex-col h-full pb-5">
         <CardHeader className="p-0">
@@ -165,19 +227,32 @@ export function CampaignCard2({ campaign }: CampaignCardProps) {
             </div>
           )}
 
-          <Button
-            className="w-80 hover:bg-green-200 flex items-center justify-center"
-            onClick={handleWithdraw}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin mr-2" /> Withdrawing...
-              </>
-            ) : (
-              "Withdraw"
-            )}
-          </Button>
+          {isOwner ? (
+            <Button
+              className="w-80 hover:bg-green-200 flex items-center justify-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleWithdraw();
+              }}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" /> Withdrawing...
+                </>
+              ) : (
+                "Withdraw"
+              )}
+            </Button>
+          ) : (
+            <Link
+              href={`/campaign/${campaign.id}/${campaign.walletaddress}`}
+              className="w-full flex justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Button className="w-80 hover:bg-green-200">Donate Now</Button>
+            </Link>
+          )}
         </CardFooter>
       </Card>
     </motion.div>

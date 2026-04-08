@@ -1,6 +1,10 @@
 import express from "express";
 import { z } from "zod";
 
+function normalizeWallet(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 const createNgoSchema = z.object({
   name: z.string().min(2),
   registrationNumber: z.string().min(2),
@@ -27,20 +31,26 @@ export function buildNgoRouter(prisma) {
   // Must be defined before `/:id` so `/me` doesn't get captured as an id.
   router.get("/me", async (req, res, next) => {
     try {
-      const walletAddress = String(req.query.walletAddress || "").trim().toLowerCase();
+      const walletAddress = normalizeWallet(req.query.walletAddress);
       if (!walletAddress) {
         return res.status(400).json({ message: "walletAddress is required" });
       }
 
-      const ngo = await prisma.nGOProfile.findFirst({
+      // Be tolerant of older rows that may store wallet casing/spacing inconsistently.
+      const candidates = await prisma.nGOProfile.findMany({
         where: {
-          walletAddress,
-          status: { in: ["APPROVED", "ACTIVE"] },
+          walletAddress: { not: null },
         },
         include: { campaigns: true },
       });
+      const ngo = candidates.find((item) => normalizeWallet(item.walletAddress) === walletAddress) || null;
+      const allowed = Boolean(ngo && ["APPROVED", "ACTIVE"].includes(String(ngo.status)));
 
-      return res.json({ allowed: Boolean(ngo), ngo });
+      return res.json({
+        allowed,
+        registered: Boolean(ngo),
+        ngo,
+      });
     } catch (e) {
       next(e);
     }

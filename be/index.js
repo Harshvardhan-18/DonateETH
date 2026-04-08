@@ -29,6 +29,37 @@ app.use('/genai', genaiRoute)
 app.use("/admin", buildAdminRouter(prisma));
 app.use("/ngos", buildNgoRouter(prisma));
 
+let donorTableEnsured = false;
+async function ensureDonationDonorTable() {
+  if (donorTableEnsured) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS donor_profiles (
+      wallet_address TEXT PRIMARY KEY,
+      donor_name TEXT NOT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  donorTableEnsured = true;
+}
+
+let campaignDonationsTableEnsured = false;
+async function ensureCampaignDonationsTable() {
+  if (campaignDonationsTableEnsured) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS campaign_donations (
+      id TEXT PRIMARY KEY,
+      campaign_id TEXT NOT NULL,
+      donor_wallet TEXT NOT NULL,
+      donor_name TEXT NULL,
+      ngo_wallet TEXT NULL,
+      amount_eth TEXT NOT NULL,
+      tx_hash TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+  campaignDonationsTableEnsured = true;
+}
+
 const otpStorage = {};
 
 app.post("/send-otp", async (req, res) => {
@@ -259,9 +290,91 @@ app.get('/campaigns/:id', async (req, res) => {
   res.json(result);
 });
 
+app.get('/campaigns/:id/donations', async (req, res) => {
+  const { id } = req.params;
+  const campaign = await prisma.campaign.findUnique({ where: { id } });
+  if (!campaign) {
+    return res.status(404).json({ message: "Campaign not found" });
+  }
+
+  // Handle multiple historical shapes:
+  // - campaignId stored as campaign UUID
+  // - campaignId stored as campaign title from chain event payload
+  const donations = await prisma.donationTransaction.findMany({
+    where: {
+      OR: [{ campaignId: id }, { campaignId: campaign.title || "" }],
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      donorWallet: true,
+      ngoWallet: true,
+      amountEth: true,
+      txHash: true,
+      createdAt: true,
+      campaignId: true,
+    },
+  });
+
+  await ensureCampaignDonationsTable();
+  const offchainDonations = await prisma.$queryRawUnsafe(
+    `
+    SELECT
+      id,
+      campaign_id AS "campaignId",
+      donor_wallet AS "donorWallet",
+      donor_name AS "donorName",
+      ngo_wallet AS "ngoWallet",
+      amount_eth AS "amountEth",
+      tx_hash AS "txHash",
+      created_at AS "createdAt"
+    FROM campaign_donations
+    WHERE campaign_id = $1
+    ORDER BY created_at DESC;
+    `,
+    id
+  );
+
+  await ensureDonationDonorTable();
+  const donorProfiles = await prisma.$queryRawUnsafe(`
+    SELECT wallet_address, donor_name
+    FROM donor_profiles;
+  `);
+  const donorNameByWallet = new Map(
+    donorProfiles.map((row) => [String(row.wallet_address || "").toLowerCase(), row.donor_name])
+  );
+
+  const merged = [...offchainDonations, ...donations]
+    .map((tx) => ({
+      ...tx,
+      donorName:
+        tx.donorName ||
+        donorNameByWallet.get(String(tx.donorWallet || "").toLowerCase()) ||
+        null,
+    }))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const seen = new Set();
+  const deduped = merged.filter((tx) => {
+    const dedupeKey =
+      String(tx.txHash || "").trim().toLowerCase() ||
+      [
+        String(tx.campaignId || id),
+        String(tx.donorWallet || "").toLowerCase(),
+        String(tx.amountEth || ""),
+        new Date(tx.createdAt || 0).toISOString(),
+      ].join("|");
+    if (seen.has(dedupeKey)) return false;
+    seen.add(dedupeKey);
+    return true;
+  });
+
+  res.json(deduped);
+});
+
 app.post('/campaigns/:id/updateRaised', async (req, res) => {
   const { id } = req.params;
-  const { amount } = req.body;
+  const { amount, donorWallet, donorName, txHash } = req.body;
 
 
   const campaign = await prisma.campaign.findUnique({
@@ -279,6 +392,56 @@ app.post('/campaigns/:id/updateRaised', async (req, res) => {
       raised: finalAns.toString(),
     },
   });
+
+  const normalizedDonorWallet = String(donorWallet || "").trim().toLowerCase();
+  const effectiveTxHash =
+    String(txHash || "").trim() ||
+    `manual-${id}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  if (normalizedDonorWallet) {
+    await ensureCampaignDonationsTable();
+    await prisma.$executeRawUnsafe(
+      `
+      INSERT INTO campaign_donations (id, campaign_id, donor_wallet, donor_name, ngo_wallet, amount_eth, tx_hash, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW());
+      `,
+      `offchain-${id}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id,
+      normalizedDonorWallet,
+      String(donorName || "").trim() || null,
+      String(campaign.walletaddress || "").toLowerCase(),
+      String(amount),
+      effectiveTxHash
+    );
+
+    try {
+      await prisma.donationTransaction.create({
+        data: {
+          campaignId: id,
+          donorWallet: normalizedDonorWallet,
+          ngoWallet: String(campaign.walletaddress || "").toLowerCase(),
+          amountEth: String(amount),
+          txHash: effectiveTxHash,
+        },
+      });
+    } catch (err) {
+      // Ignore duplicate txHash insert errors from repeated submits.
+      console.error("Failed to persist donation transaction:", err?.message || err);
+    }
+
+    if (String(donorName || "").trim()) {
+      await ensureDonationDonorTable();
+      await prisma.$executeRawUnsafe(
+        `
+        INSERT INTO donor_profiles (wallet_address, donor_name, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (wallet_address)
+        DO UPDATE SET donor_name = EXCLUDED.donor_name, updated_at = NOW();
+        `,
+        normalizedDonorWallet,
+        String(donorName).trim()
+      );
+    }
+  }
   
   res.json(cam);
 });

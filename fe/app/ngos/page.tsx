@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiUrl } from "@/lib/api";
 import { motion } from "framer-motion";
+import { useAccount } from "wagmi";
 
 type Ngo = {
   id: string;
@@ -23,9 +24,12 @@ type Ngo = {
 };
 
 export default function NgoDirectoryPage() {
+  const { address } = useAccount();
   const [ngos, setNgos] = useState<Ngo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [registeredNgo, setRegisteredNgo] = useState<Ngo | null>(null);
+  const [checkingRegisteredNgo, setCheckingRegisteredNgo] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -55,6 +59,29 @@ export default function NgoDirectoryPage() {
   useEffect(() => {
     fetchNgos();
   }, []);
+
+  useEffect(() => {
+    const checkRegisteredNgo = async () => {
+      if (!address) {
+        setRegisteredNgo(null);
+        return;
+      }
+      setCheckingRegisteredNgo(true);
+      try {
+        const walletAddress = address.toLowerCase();
+        const res = await fetch(apiUrl(`/ngos/me?walletAddress=${walletAddress}`), { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to check existing NGO registration");
+        const data = await res.json();
+        setRegisteredNgo(data?.registered ? data?.ngo ?? null : null);
+      } catch {
+        setRegisteredNgo(null);
+      } finally {
+        setCheckingRegisteredNgo(false);
+      }
+    };
+
+    checkRegisteredNgo();
+  }, [address]);
 
   const onCreateNgo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,40 +188,53 @@ export default function NgoDirectoryPage() {
                 <h2 className="text-xl font-semibold">Register your NGO</h2>
                 <p className="text-sm text-muted-foreground mt-1">Your NGO will appear publicly after admin approval.</p>
 
-                <form className="space-y-4 mt-4" onSubmit={onCreateNgo}>
-                  <div className="space-y-2">
-                    <Label>Name</Label>
-                    <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                {checkingRegisteredNgo ? (
+                  <p className="text-sm text-muted-foreground mt-4">Checking your wallet registration...</p>
+                ) : registeredNgo ? (
+                  <div className="mt-4 rounded-md border border-yellow-300/50 p-4 text-sm">
+                    You are already registered with this wallet address.
+                    <div className="mt-2 text-muted-foreground">
+                      <p>Name: {registeredNgo.name}</p>
+                      <p>Registration: {registeredNgo.registrationNumber || "-"}</p>
+                      <p>Status: {registeredNgo.status}</p>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Registration Number</Label>
-                    <Input
-                      value={form.registrationNumber}
-                      onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Email (optional)</Label>
-                    <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Phone (optional)</Label>
-                    <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Wallet Address</Label>
-                    <Input
-                      value={form.walletAddress}
-                      onChange={(e) => setForm({ ...form, walletAddress: e.target.value })}
-                      required
-                      placeholder="0x..."
-                    />
-                  </div>
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? "Submitting..." : "Submit for Review"}
-                  </Button>
-                </form>
+                ) : (
+                  <form className="space-y-4 mt-4" onSubmit={onCreateNgo}>
+                    <div className="space-y-2">
+                      <Label>Name</Label>
+                      <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Registration Number</Label>
+                      <Input
+                        value={form.registrationNumber}
+                        onChange={(e) => setForm({ ...form, registrationNumber: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Email (optional)</Label>
+                      <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Phone (optional)</Label>
+                      <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Wallet Address</Label>
+                      <Input
+                        value={form.walletAddress}
+                        onChange={(e) => setForm({ ...form, walletAddress: e.target.value })}
+                        required
+                        placeholder="0x..."
+                      />
+                    </div>
+                    <Button type="submit" disabled={submitting}>
+                      {submitting ? "Submitting..." : "Submit for Review"}
+                    </Button>
+                  </form>
+                )}
 
                 {created ? (
                   <p className="text-sm text-green-700 mt-4">
