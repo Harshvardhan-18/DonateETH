@@ -15,7 +15,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import axios from "axios";
-import { useAccount, useWriteContract } from "wagmi";
+import { useAccount, useWriteContract, useChainId } from "wagmi";
+import { sepolia } from "wagmi/chains";
 import { contract } from "../../../../lib/contract";
 import { apiUrl, assetUrl } from "@/lib/api";
 
@@ -23,6 +24,7 @@ export default function CampaignPage() {
   const router = useRouter();
   const { id } = useParams();
   const { address } = useAccount();
+  const chainId = useChainId();
   const [campaignData, setCampaignData] = useState<any>(null);
   const [donorName, setDonorName] = useState("");
   const [donationAmount, setDonationAmount] = useState("");
@@ -30,6 +32,7 @@ export default function CampaignPage() {
   const [donations, setDonations] = useState<any[]>([]);
   const [isDonating, setIsDonating] = useState(false);
   const [donationSuccess, setDonationSuccess] = useState(false);
+  const [transactionHash, setTransactionHash] = useState<string | null>(null);
 
   // ✅ useWriteContract should be at the top level
   const { data, isPending, isSuccess, writeContract } = useWriteContract();
@@ -60,6 +63,47 @@ export default function CampaignPage() {
     if (id) fetchCampaign();
   }, [id]);
 
+  // Monitor transaction completion
+  useEffect(() => {
+    if (isSuccess && data && transactionHash === null) {
+      setTransactionHash(data);
+      console.log("Transaction confirmed:", data);
+      
+      // Log donation after transaction confirmation
+      logDonationToDB(data);
+    }
+  }, [isSuccess, data, transactionHash]);
+
+  const logDonationToDB = async (txHash: string) => {
+    try {
+      const response = await axios.post(
+        apiUrl(`/campaigns/${campaignData.id}/updateRaised`),
+        {
+          amount: donationAmount,
+          donorWallet: address,
+          donorName: donorName.trim(),
+          txHash: txHash,
+        },
+        {
+          headers: {  
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      setCampaignData(response.data);
+      const donationsRes = await axios.get(apiUrl(`/campaigns/${campaignData.id}/donations`));
+      setDonations(donationsRes.data || []);
+      setDonationSuccess(true);
+      setDonorName("");
+      setDonationAmount("");
+      console.log("Donation logged:", response.data);
+    } catch (err) {
+      console.error("Error logging donation:", err);
+    } finally {
+      setIsDonating(false);
+    }
+  };
+
   const handleDonate = async () => {
     if (!donationAmount) {
       alert("Please enter a donation amount!");
@@ -74,33 +118,27 @@ export default function CampaignPage() {
       return;
     }
 
+    if (chainId !== sepolia.id) {
+      alert(`Please switch to Sepolia network (Chain ID: ${sepolia.id}). You are currently on chain ID: ${chainId}`);
+      return;
+    }
+
     console.log("contract address: ", contract.address)
     try {
       setIsDonating(true);
       setDonationSuccess(false);
+      setTransactionHash(null);
 
-      const response = await axios.post(
-        apiUrl(`/campaigns/${campaignData.id}/updateRaised`),
-        {
-          amount: donationAmount,
-          donorWallet: address,
-          donorName: donorName.trim(),
-          txHash: `offchain-${campaignData.id}-${Date.now()}`,
-        },
-        {
-          headers: {  
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      setCampaignData(response.data);
-      const donationsRes = await axios.get(apiUrl(`/campaigns/${campaignData.id}/donations`));
-      setDonations(donationsRes.data || []);
-      setDonationSuccess(true);
-      console.log(response.data);
+      // Call smart contract donate function on Sepolia
+      writeContract({
+        address: contract.address as `0x${string}`,
+        abi: contract.abi,
+        functionName: "donate",
+        args: [campaignData.walletaddress as `0x${string}`, campaignData.id],
+        value: BigInt(Math.round(parseFloat(donationAmount) * 1e18)),
+      });
     } catch (err) {
-      console.error("Error while donating:", err);
-    } finally {
+      console.error("Error while initiating donation:", err);
       setIsDonating(false);
     }
   };
@@ -149,7 +187,12 @@ export default function CampaignPage() {
               </div>
             </div>
 
-            <h1 className="mt-6 text-3xl font-bold">{campaignData.title}</h1>
+            {campaignData.ngo?.name && (
+              <p className="mt-4 text-sm text-primary font-medium uppercase tracking-wide">
+                {campaignData.ngo.name}
+              </p>
+            )}
+            <h1 className="mt-2 text-3xl font-bold">{campaignData.title}</h1>
             <div className="mt-4 flex items-center space-x-4 text-sm text-muted-foreground">
               <span className="flex items-center">
                 <Clock className="mr-1 h-4 w-4" />
@@ -169,7 +212,7 @@ export default function CampaignPage() {
               </TabsList>
 
               <TabsContent value="about">
-                <p className="text-muted-foreground">
+                <p className="truncate text-muted-foreground" title={campaignData.description || ""}>
                   {campaignData.description}
                 </p>
               </TabsContent>
@@ -182,7 +225,7 @@ export default function CampaignPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium">{milestone.title}</p>
-                          <p className="text-sm text-muted-foreground">₹{milestone.amount}</p>
+                          <p className="text-sm text-muted-foreground">{milestone.amount} ETH</p>
                         </div>
                         {milestone.status === "completed" ? (
                           <CheckCircle2 className="h-5 w-5 text-green-500" />
@@ -251,8 +294,8 @@ export default function CampaignPage() {
                         value={donationAmount}
                         onChange={(e) => setDonationAmount(e.target.value)}
                       />
-                      <Button className="w-full bg-green-300" size="lg" onClick={handleDonate} disabled={isDonating}>
-                        {isDonating ? "Processing..." : "Donate Now"}
+                      <Button className="w-full bg-green-300" size="lg" onClick={handleDonate} disabled={isDonating || isPending}>
+                        {isDonating ? (isPending ? "Waiting for confirmation..." : "Signing...") : "Donate Now"}
                       </Button>
                     </>
                   )}
@@ -260,7 +303,7 @@ export default function CampaignPage() {
                 </div>
 
                 <p className="text-center text-sm text-muted-foreground">
-                  Secured by blockchain technology
+                  Secured by ETH
                 </p>
               </div>
             </Card>

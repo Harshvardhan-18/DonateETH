@@ -13,11 +13,9 @@ export const config = createConfig({
     safe(),
   ],
   transports: {
-    [mainnet.id]: http('https://eth-mainnet.g.alchemy.com/v2/xio_CgWy-_JQRHzbn2e3J2pw5nYesTGp'),
+    [mainnet.id]: http('https://eth-mainnet.g.alchemy.com/v2/w1PQL75NBm9P70_q3igs8'),
     [base.id]: http(),
-    [sepolia.id]:  http('https://eth-sepolia.g.alchemy.com/v2/xio_CgWy-_JQRHzbn2e3J2pw5nYesTGp'),
+    [sepolia.id]:  http('https://eth-sepolia.g.alchemy.com/v2/w1PQL75NBm9P70_q3igs8'),
     [optimism.id]: http(),
   },
 })
-
-// https://eth-sepolia.g.alchemy.com/v2/xio_CgWy-_JQRHzbn2e3J2pw5nYesTGp

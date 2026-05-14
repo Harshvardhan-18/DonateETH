@@ -33,8 +33,6 @@ export default function CampaignsPage() {
     fetchCampaigns();
   }, []);
 
-  console.log(campaigns)
-
   return (
     <main className="min-h-screen bg-background">
       <Navbar />

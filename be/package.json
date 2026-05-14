@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "node index.js",
+    "migrate:uploads": "node scripts/migrate-uploads-to-pinata.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

@@ -144,7 +144,7 @@ export default function AdminDashboardPage() {
               <div className="space-y-2">
                 {overview?.recentTransactions?.map((tx: any) => (
                   <div key={tx.id} className="text-sm border-b pb-2">
-                    Donor: {tx.donorName || tx.donorWallet} {"->"} NGO: {tx.ngoWallet} | {tx.amountEth} ETH {tx.isSample ? "(sample)" : ""} | <a href={tx.etherscanUrl} target="_blank" rel="noreferrer" className="underline">Tx</a>
+                    Donor: {tx.donorWallet} {"->"} NGO: {tx.ngoWallet} | {tx.amountEth} ETH {tx.isSample ? "(sample)" : ""} | <a href={tx.etherscanUrl} target="_blank" rel="noreferrer" className="underline">Tx</a>
                   </div>
                 ))}
               </div>

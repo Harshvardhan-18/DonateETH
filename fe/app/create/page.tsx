@@ -11,18 +11,17 @@
     import { motion } from "framer-motion";
     import axios from "axios";
     import { useAccount } from "wagmi";
-    import { checkImageExistsOnWeb } from "./geminiapi"; // Import the new function
+    import { useRouter } from "next/navigation";
     import { apiUrl } from "@/lib/api";
     
     export default function CreateCampaignPage() {
+      const router = useRouter();
       const { address, isConnected } = useAccount();
       const [isSubmitting, setIsSubmitting] = useState(false);
       const [title, setTitle] = useState("");
       const [description, setDescription] = useState("");
       const [imageUrl, setImage] = useState("");
       const [imageFile, setImageFile] = useState<File | null>(null);
-      const [imageCheckResult, setImageCheckResult] = useState<string | null>(null);
-      const [isCheckingImage, setIsCheckingImage] = useState(false);
       const [raised, setRaised] = useState("");
       const [goal, setGoal] = useState("");
       const [daysLeft, setDaysLeft] = useState("");
@@ -94,26 +93,6 @@
         }
         setIsSubmitting(true);
         
-        // Check if the image exists on the web before submitting
-        if (imageFile && !imageCheckResult) {
-          try {
-            setIsCheckingImage(true);
-            const result = await checkImageExistsOnWeb(imageFile);
-            setImageCheckResult(result);
-            
-            if (result === "found it") {
-              alert("This image appears to exist on the web. Please use an original image for your campaign.");
-              setIsSubmitting(false);
-              setIsCheckingImage(false);
-              return;
-            }
-            setIsCheckingImage(false);
-          } catch (error) {
-            console.error("Error checking image:", error);
-            setIsCheckingImage(false);
-          }
-        }
-      
         const formData = new FormData();
         
         // Add basic form data
@@ -155,6 +134,14 @@
       
           const data = await response.data;
           if (data.success) {
+            const campaignId = data.campaignId;
+            const walletAddress = String(address || "").toLowerCase();
+
+            if (campaignId && walletAddress) {
+              router.replace(`/campaign/${campaignId}/${walletAddress}`);
+              return;
+            }
+
             alert("Campaign created successfully!");
           } else { 
             alert(data.message || "An error occurred.");
@@ -172,34 +159,6 @@
           const file = e.target.files[0];
           setImageFile(file);
           setImage("");  // Clear the URL if a file is selected
-          setImageCheckResult(null); // Reset the check result when a new image is selected
-        }
-      };
-      
-      // New function to check image without submitting the form
-      const handleCheckImage = async () => {
-        if (!imageFile) {
-          alert("Please select an image first");
-          return;
-        }
-        
-        setIsCheckingImage(true);
-        try {
-          const result = await checkImageExistsOnWeb(imageFile);
-          setImageCheckResult(result);
-          
-          if (result === "found it") {
-            alert("This image appears to exist on the web. Please use an original image for your campaign.");
-          } else if (result === "not found") {
-            alert("Image check passed. The image appears to be original.");
-          } else {
-            alert("Image check result: " + result);
-          }
-        } catch (error) {
-          console.error("Error checking image:", error);
-          alert("Error checking image");
-        } finally {
-          setIsCheckingImage(false);
         }
       };
       
@@ -357,14 +316,14 @@
     
                   <div className="space-y-2">
                     <Label htmlFor="goal" className="pl-1">
-                      Fundraising Goal (₹)
+                      Fundraising Goal (ETH)
                     </Label>
                     <Input
                       id="goal"
                       type="number"
                       placeholder="Enter amount"
                       value={goal}
-                      min="1000"
+                      min="10"
                       onChange={(e) => setGoal(e.target.value)}
                       required
                     />
@@ -382,34 +341,6 @@
                           className="w-full"
                         />
                       </div>
-                      {imageFile && (
-                        <div className="flex items-center gap-2">
-                          <Button 
-                            type="button" 
-                            onClick={handleCheckImage}
-                            disabled={isCheckingImage}
-                            className="w-full"
-                          >
-                            {isCheckingImage ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Checking Image...
-                              </>
-                            ) : (
-                              "Verify Image Authenticity"
-                            )}
-                          </Button>
-                        </div>
-                      )}
-                      {imageCheckResult && (
-                        <div className={`p-2 rounded-md ${imageCheckResult === "found it" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                          {imageCheckResult === "found it" 
-                            ? "Warning: This image appears to exist on the web." 
-                            : imageCheckResult === "not found" 
-                              ? "Image appears to be original." 
-                              : `Image check result: ${imageCheckResult}`}
-                        </div>
-                      )}
                       <div className="flex items-center gap-2">
                         <p className="text-sm text-muted-foreground">OR</p>
                       </div>
@@ -523,7 +454,7 @@
                             htmlFor={`milestone-${index}-amount`}
                             className="pl-1"
                           >
-                            Amount (₹)
+                            Amount (ETH)
                           </Label>
                           <Input
                             id={`milestone-${index}-amount`}
@@ -554,9 +485,7 @@
                   !isConnected ||
                   !ngoAllowed ||
                   !ngoRegistrationNumber ||
-                  isNgoChecking ||
-                  isCheckingImage ||
-                  (imageFile && imageCheckResult === "found it")
+                  isNgoChecking
               )}
       >
       {isSubmitting ? (

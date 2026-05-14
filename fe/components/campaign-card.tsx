@@ -22,11 +22,16 @@ interface CampaignCardProps {
     raised: number;
     goal: number;
     daysLeft: number;
+    ngo?: {
+      name?: string;
+    } | null;
   };
 }
 
 export function CampaignCard({ campaign }: CampaignCardProps) {
-  const progress = (campaign.raised / campaign.goal) * 100;
+  const raisedAmount = Number(campaign.raised || 0);
+  const goalAmount = Number(campaign.goal || 0);
+  const progress = goalAmount > 0 ? Math.min(100, Math.max(0, (raisedAmount / goalAmount) * 100)) : 0;
   const campaignImageSrc = assetUrl(campaign.imageUrl);
   const router = useRouter();
   const { address } = useAccount();
@@ -86,13 +91,18 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
 
         {/* Make this section expand to push the button to the bottom */}
         <CardContent className="p-4 flex-grow flex flex-col">
+          {campaign.ngo?.name ? (
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-primary">
+              {campaign.ngo.name}
+            </p>
+          ) : null}
           <h3 className="text-xl font-semibold">{campaign.title}</h3>
-          <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
+          <p className="mt-2 truncate text-sm text-muted-foreground" title={campaign.description}>
             {campaign.description}
           </p>
           <Progress value={progress} className="mt-4" />
           <div className="mt-2 flex items-center justify-between text-sm">
-            <span>₹{campaign.raised.toLocaleString()} raised</span>
+            <span>{raisedAmount.toLocaleString()} ETH raised</span>
             <span className="font-medium">{Math.round(progress)}%</span>
           </div>
           <div className="mt-1 text-sm text-muted-foreground">
@@ -104,16 +114,16 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
         </CardContent>
 
         {/* Keep the button aligned at the bottom */}
-        <CardFooter className="p-4 pt-0 flex flex-col items-center">
+        <CardFooter className="p-4 pt-0 flex flex-col items-center w-full">
           {isSuccess ? (
-            <div className="flex items-center text-green-500 text-sm mb-2">
+            <div className="flex items-center text-green-500 text-sm mb-3 w-full justify-center">
               <CheckCircle className="h-5 w-5 mr-1" />
               Withdrawal Successful!
             </div>
           ) : null}
           {isOwner ? (
             <Button
-              className="w-80 hover:bg-green-200 flex items-center justify-center"
+              className="w-full hover:bg-green-200"
               onClick={(e) => {
                 e.stopPropagation();
                 handleWithdraw();
@@ -131,10 +141,10 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
           ) : (
             <Link
               href={`/campaign/${campaign.id}/${campaign.walletaddress}`}
-              className="w-full flex justify-center"
+              className="w-full"
               onClick={(e) => e.stopPropagation()}
             >
-              <Button className="w-80 hover:bg-green-200">Donate Now</Button>
+              <Button className="w-full hover:bg-green-200">Donate Now</Button>
             </Link>
           )}
         </CardFooter>
@@ -144,7 +154,9 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
 }
 
 export function CampaignCard2({ campaign }: CampaignCardProps) {
-  const progress = (campaign.raised / campaign.goal) * 100;
+  const raisedAmount = Number(campaign.raised || 0);
+  const goalAmount = Number(campaign.goal || 0);
+  const progress = goalAmount > 0 ? Math.min(100, Math.max(0, (raisedAmount / goalAmount) * 100)) : 0;
   const campaignImageSrc = assetUrl(campaign.imageUrl);
   const router = useRouter();
   const { address } = useAccount();
@@ -203,13 +215,18 @@ export function CampaignCard2({ campaign }: CampaignCardProps) {
         </CardHeader>
 
         <CardContent className="p-4 flex-grow flex flex-col">
+          {campaign.ngo?.name ? (
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-primary">
+              {campaign.ngo.name}
+            </p>
+          ) : null}
           <h3 className="text-xl font-semibold">{campaign.title}</h3>
-          <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
+          <p className="mt-2 truncate text-sm text-muted-foreground" title={campaign.description}>
             {campaign.description}
           </p>
           <Progress value={progress} className="mt-4" />
           <div className="mt-2 flex items-center justify-between text-sm">
-            <span>₹{campaign.raised.toLocaleString()} raised</span>
+            <span>{raisedAmount.toLocaleString()} ETH raised</span>
             <span className="font-medium">{Math.round(progress)}%</span>
           </div>
           <div className="mt-1 text-sm text-muted-foreground">
@@ -219,9 +236,9 @@ export function CampaignCard2({ campaign }: CampaignCardProps) {
           <div className="flex-grow"></div>
         </CardContent>
 
-        <CardFooter className="p-4 pt-0 flex flex-col items-center">
+        <CardFooter className="p-4 pt-0 flex flex-col items-center w-full">
           {isSuccess && (
-            <div className="flex items-center text-green-500 text-sm mb-2">
+            <div className="flex items-center text-green-500 text-sm mb-3 w-full justify-center">
               <CheckCircle className="h-5 w-5 mr-1" />
               Withdrawal Successful!
             </div>
@@ -229,7 +246,7 @@ export function CampaignCard2({ campaign }: CampaignCardProps) {
 
           {isOwner ? (
             <Button
-              className="w-80 hover:bg-green-200 flex items-center justify-center"
+              className="w-full hover:bg-green-200 flex items-center justify-center"
               onClick={(e) => {
                 e.stopPropagation();
                 handleWithdraw();
@@ -247,10 +264,10 @@ export function CampaignCard2({ campaign }: CampaignCardProps) {
           ) : (
             <Link
               href={`/campaign/${campaign.id}/${campaign.walletaddress}`}
-              className="w-full flex justify-center"
+              className="w-full"
               onClick={(e) => e.stopPropagation()}
             >
-              <Button className="w-80 hover:bg-green-200">Donate Now</Button>
+              <Button className="w-full hover:bg-green-200">Donate Now</Button>
             </Link>
           )}
         </CardFooter>

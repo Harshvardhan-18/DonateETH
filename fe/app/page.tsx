@@ -17,6 +17,9 @@ type Campaign = {
   goal?: string | number | null;
   daysLeft?: number | null;
   isActive?: boolean | null;
+  ngo?: {
+    name?: string | null;
+  } | null;
 };
 
 export default function Home() {
@@ -176,14 +179,17 @@ export default function Home() {
                     />
                   ) : null}
                 </div>
-                <h3 className="mt-4 font-semibold line-clamp-1">{campaign.title || "Untitled Campaign"}</h3>
+                {campaign.ngo?.name && (
+                  <p className="mt-4 text-xs text-primary font-medium uppercase tracking-wide">{campaign.ngo.name}</p>
+                )}
+                <h3 className="mt-1 font-semibold line-clamp-1">{campaign.title || "Untitled Campaign"}</h3>
                 <p className="mt-1 text-sm text-muted-foreground line-clamp-2">{campaign.description || "No description available."}</p>
                 <div className="mt-2 h-2 rounded-full bg-secondary">
                   <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
                 </div>
                 <div className="mt-4 flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">
-                    ₹{Number.isFinite(raised) ? raised.toLocaleString() : "0"} raised
+                    {Number.isFinite(raised) ? raised.toLocaleString() : "0"} ETH raised
                   </span>
                   <span className="font-medium">{Math.round(progress)}%</span>
                 </div>

@@ -2,11 +2,8 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import http from "http";
-import sgMail from "@sendgrid/mail";
 import { PrismaClient } from "@prisma/client";
 import multer from "multer";
-import fs from "fs";
-import path from "path";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import genaiRoute from './genai.js';
@@ -20,7 +17,6 @@ const __dirname = dirname(__filename);
 const prisma = new PrismaClient();
 
 dotenv.config();
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 const app = express();
 app.use(express.json());
@@ -28,6 +24,7 @@ app.use(cors());
 app.use('/genai', genaiRoute)
 app.use("/admin", buildAdminRouter(prisma));
 app.use("/ngos", buildNgoRouter(prisma));
+app.use('/uploads', express.static(join(__dirname, 'uploads')));
 
 let donorTableEnsured = false;
 async function ensureDonationDonorTable() {
@@ -60,73 +57,65 @@ async function ensureCampaignDonationsTable() {
   campaignDonationsTableEnsured = true;
 }
 
-const otpStorage = {};
+const pinataGatewayBase = (process.env.PINATA_GATEWAY_BASE || "https://gateway.pinata.cloud/ipfs/").replace(/\/+$/, "/");
 
-app.post("/send-otp", async (req, res) => {
-  const { email } = req.body;
-  
-  const otp = Math.floor(100000 + Math.random() * 900000); // Generate 6-digit OTP
-  otpStorage[email] = otp;
+function getPinataAuthHeaders() {
+  const pinataJwt = String(process.env.PINATA_JWT || "").trim();
+  const pinataApiKey = String(process.env.PINATA_API_KEY || "").trim();
+  const pinataApiSecret = String(process.env.PINATA_API_SECRET || "").trim();
 
-  const message = {
-    to: email,
-    from: "aniketwarule775@gmail.com",
-    subject: "Your OTP Code",
-    text: `Your OTP code is: ${otp}`,
-    html: `<p>Your OTP code is: <strong>${otp}</strong></p>`,
-  };
-
-  if (!email) {
-    return res.status(400).json({ success: false, message: "Email is required" });
-  }
-
-  try {
-    await sgMail.send(message);
-    res.json({ success: true, message: "OTP sent successfully", otp }); // Remove OTP in real implementation
-  } catch (error) {
-    console.error("Error sending OTP:", error.response ? error.response.body : error.message);
-    res.status(500).json({ success: false, message: "Failed to send OTP" });
-  }
-});
-
-app.post("/verify-otp", (req, res) => {
-  const { email, code } = req.body;
-
-  if (!email || !code) {
-    return res.status(400).json({ success: false, message: "Email and OTP are required" });
-  }
-
-  if (otpStorage[email] && otpStorage[email].toString() == code) {
-    delete otpStorage[email]; // Remove OTP after verification
-    return res.json({ success: true, message: "OTP Verified!" });
-  }
-
-  res.json({ success: false, message: "Invalid OTP" });
-});
-
-// Configure multer storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = join(__dirname, 'uploads');
-    
-    // Create the uploads directory if it doesn't exist
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+  if (pinataJwt) {
+    const segments = pinataJwt.split(".");
+    if (segments.length === 3) {
+      return { Authorization: `Bearer ${pinataJwt}` };
     }
-    
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // Create a unique filename with original extension
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
   }
-});
 
-// Configure multer upload
+  if (pinataApiKey && pinataApiSecret) {
+    return {
+      pinata_api_key: pinataApiKey,
+      pinata_secret_api_key: pinataApiSecret,
+    };
+  }
+
+  throw new Error(
+    "Pinata credentials are missing or invalid. Provide PINATA_JWT (three JWT segments) or PINATA_API_KEY and PINATA_API_SECRET."
+  );
+}
+
+async function uploadFileToPinata(file, folderName) {
+  if (!file) return null;
+
+  const formData = new FormData();
+  const fileBlob = new Blob([file.buffer], { type: file.mimetype || "application/octet-stream" });
+  formData.append("file", fileBlob, file.originalname || "upload.bin");
+  formData.append(
+    "pinataMetadata",
+    JSON.stringify({
+      name: file.originalname || folderName,
+      keyvalues: { folder: folderName },
+    })
+  );
+  formData.append("pinataOptions", JSON.stringify({ cidVersion: 1 }));
+
+  const response = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+    method: "POST",
+    headers: getPinataAuthHeaders(),
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Pinata upload failed (${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+  return `${pinataGatewayBase}${data.IpfsHash}`;
+}
+
+// Configure multer upload in memory so files can be pinned to IPFS
 const upload = multer({ 
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB file size limit
 });
 
@@ -191,28 +180,23 @@ app.post("/create-campaign", upload.fields([
       });
     }
     
-    // Handle file paths
+    // Handle file uploads via Pinata/IPFS
     let imageUrl = null;
     let certificateUrl = null;
     let supportingDocUrl = null;
     
-    // Process uploaded files if they exist
-    if (req.files) {
-      if (req.files.imageUrl && req.files.imageUrl[0]) {
-        imageUrl = `/uploads/${req.files.imageUrl[0].filename}`;
-      } else if (imageUrlLink) {
-        imageUrl = imageUrlLink;
-      }
-      
-      if (req.files.certificateFile && req.files.certificateFile[0]) {
-        certificateUrl = `/uploads/${req.files.certificateFile[0].filename}`;
-        console.log(certificateUrl)
-      }
-      
-      if (req.files.supportingDocFile && req.files.supportingDocFile[0]) {
-        supportingDocUrl = `/uploads/${req.files.supportingDocFile[0].filename}`;
-        console.log(supportingDocUrl)
-      }
+    if (req.files?.imageUrl?.[0]) {
+      imageUrl = await uploadFileToPinata(req.files.imageUrl[0], "campaign-image");
+    } else if (imageUrlLink) {
+      imageUrl = imageUrlLink;
+    }
+
+    if (req.files?.certificateFile?.[0]) {
+      certificateUrl = await uploadFileToPinata(req.files.certificateFile[0], "campaign-certificate");
+    }
+
+    if (req.files?.supportingDocFile?.[0]) {
+      supportingDocUrl = await uploadFileToPinata(req.files.supportingDocFile[0], "campaign-supporting-doc");
     }
     
     // Create campaign in database
@@ -266,11 +250,15 @@ app.post("/create-campaign", upload.fields([
   }
 });
 
-// Serve uploaded files statically
-app.use('/uploads', express.static(join(__dirname, 'uploads')));
-
 app.get('/campaigns', async (req, res) => {
-  const result = await prisma.campaign.findMany({});
+  const result = await prisma.campaign.findMany({
+    where: {
+      ngo: {
+        status: { in: ["APPROVED", "ACTIVE"] },
+      },
+    },
+    include: { ngo: true },
+  });
   res.json(result);
 });
 
@@ -281,18 +269,31 @@ app.get('/milestones', async (req, res) => {
 
 app.get('/campaigns/:id', async (req, res) => {
   const { id } = req.params;
-  console.log(id)
-  const result = await prisma.campaign.findUnique({
+  const result = await prisma.campaign.findFirst({
     where: {
       id,
+      ngo: {
+        status: { in: ["APPROVED", "ACTIVE"] },
+      },
     },
+    include: { ngo: true },
   });
+  if (!result) {
+    return res.status(404).json({ message: "Campaign not found" });
+  }
   res.json(result);
 });
 
 app.get('/campaigns/:id/donations', async (req, res) => {
   const { id } = req.params;
-  const campaign = await prisma.campaign.findUnique({ where: { id } });
+  const campaign = await prisma.campaign.findFirst({
+    where: {
+      id,
+      ngo: {
+        status: { in: ["APPROVED", "ACTIVE"] },
+      },
+    },
+  });
   if (!campaign) {
     return res.status(404).json({ message: "Campaign not found" });
   }
