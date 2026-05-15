@@ -289,35 +289,49 @@ export default function CampaignPage() {
               <TabsContent value="ngo-transactions">
                 <div className="space-y-3">
                   {ngoTransactions.map((tx) => (
-                    <Card key={tx.id} className="p-4">
+                    <Card key={tx.id || tx.txHash} className="p-4 transition-all hover:shadow-md">
                       <div className="flex items-start justify-between gap-4">
                         <div className="space-y-1">
-                          <p className="text-sm font-medium">Sent from NGO wallet</p>
-                          <p className="text-xs text-muted-foreground break-all">{tx.ngoWallet || ngoWallet}</p>
-                          <p className="text-xs text-muted-foreground">{tx.blockNumber ? `Block ${tx.blockNumber}` : "On-chain withdrawal"}</p>
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full ${tx.type === 'withdrawal' ? 'bg-blue-500' : 'bg-green-500'}`} />
+                            <p className="text-sm font-semibold">
+                              {tx.type === "withdrawal" ? "Withdrawal from Contract" : "External Payment"}
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground break-all">
+                            {tx.type === "withdrawal" ? "To: " : "From: "}
+                            {tx.ngoWallet || ngoWallet}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {tx.blockNumber ? `Block ${tx.blockNumber}` : "On-chain"}
+                          </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-semibold">{Number(tx.amountEth || 0).toFixed(4)} ETH</p>
+                          <p className="text-sm font-bold text-primary">
+                            {Number(tx.amountEth || 0).toFixed(6)} ETH
+                          </p>
                           <a
                             href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-xs text-primary underline break-all"
+                            className="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center justify-end gap-1"
                             title="Open transaction in Sepolia Etherscan"
                           >
-                            {tx.txHash}
+                            View on Etherscan
+                            <ArrowUpRight className="h-2 w-2" />
                           </a>
                         </div>
                       </div>
                     </Card>
                   ))}
                   {ngoTransactions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No outgoing NGO transactions yet.</p>
-                  ) : null}
-                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <ArrowUpRight className="h-4 w-4" />
-                    Showing the latest 3 outgoing withdrawals for this NGO wallet.
-                  </p>
+                    <p className="text-sm text-muted-foreground text-center py-8">No outgoing NGO transactions yet.</p>
+                  ) : (
+                    <p className="flex items-center justify-center gap-2 pt-4 text-[10px] text-muted-foreground uppercase tracking-widest">
+                      <ArrowUpRight className="h-3 w-3" />
+                      Showing the latest 3 sent transactions from this NGO
+                    </p>
+                  )}
                 </div>
               </TabsContent>
             </Tabs>

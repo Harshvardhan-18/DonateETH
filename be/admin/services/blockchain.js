@@ -30,7 +30,7 @@ export async function fetchRecentDonationEvents(fromBlock = -5000) {
   }));
 }
 
-export async function fetchRecentWithdrawalEvents(fromBlock = -5000) {
+export async function fetchRecentWithdrawalEvents(fromBlock = -200000) {
   if (!adminConfig.rpcUrl || !adminConfig.donationContractAddress) {
     return [];
   }
@@ -50,5 +50,36 @@ export async function fetchRecentWithdrawalEvents(fromBlock = -5000) {
 }
 
 export function etherscanTxUrl(txHash) {
-  return `https://etherscan.io/tx/${txHash}`;
+  return `https://sepolia.etherscan.io/tx/${txHash}`;
+}
+
+export async function fetchWalletSentTransactions(walletAddress) {
+  if (!walletAddress) return [];
+
+  // Use Blockscout API for Sepolia to fetch normal transactions
+  const url = `https://eth-sepolia.blockscout.com/api?module=account&action=txlist&address=${walletAddress}&startblock=0&endblock=99999999&page=1&offset=50&sort=desc`;
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status === "1" && Array.isArray(data.result)) {
+      return data.result
+        .filter((tx) => tx.from.toLowerCase() === walletAddress.toLowerCase())
+        .slice(0, 3)
+        .map((tx) => ({
+          id: tx.hash,
+          ngoWallet: tx.from,
+          to: tx.to,
+          amountEth: ethers.formatEther(tx.value),
+          txHash: tx.hash,
+          blockNumber: tx.blockNumber,
+          direction: "sent",
+          timestamp: tx.timeStamp,
+        }));
+    }
+  } catch (error) {
+    console.error("Error fetching wallet transactions from Blockscout:", error);
+  }
+  return [];
 }

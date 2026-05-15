@@ -9,7 +9,7 @@ import { dirname, join } from "path";
 import genaiRoute from './genai.js';
 import { buildAdminRouter } from "./admin/router.js";
 import { buildNgoRouter } from "./ngo/router.js";
-import { fetchRecentWithdrawalEvents } from "./admin/services/blockchain.js";
+import { fetchRecentWithdrawalEvents, fetchWalletSentTransactions } from "./admin/services/blockchain.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -392,25 +392,34 @@ app.get('/campaigns/:id/ngo-transactions', async (req, res) => {
   }
 
   const ngoWallet = String(campaign.walletaddress || campaign.ngo?.walletAddress || "").trim().toLowerCase();
+  
   if (!ngoWallet) {
     return res.json([]);
   }
 
   const chainWithdrawals = await fetchRecentWithdrawalEvents();
-  const transactions = chainWithdrawals
+  const contractWithdrawals = chainWithdrawals
     .filter((tx) => String(tx.ngoWallet || "").trim().toLowerCase() === ngoWallet)
+    .map((tx) => ({ ...tx, type: "withdrawal" }));
+
+  const walletTransactions = await fetchWalletSentTransactions(ngoWallet);
+  
+  // Merge and sort by block number or timestamp
+  // Note: walletTransactions from Etherscan already has blockNumber and timestamp
+  const allTransactions = [...contractWithdrawals, ...walletTransactions]
     .sort((a, b) => Number(b.blockNumber || 0) - Number(a.blockNumber || 0))
     .slice(0, 3)
     .map((tx) => ({
-      id: tx.txHash,
+      id: tx.txHash || tx.id,
       ngoWallet: tx.ngoWallet,
       amountEth: tx.amountEth,
       txHash: tx.txHash,
       blockNumber: tx.blockNumber,
-      direction: "sent",
+      direction: tx.direction || "sent",
+      type: tx.type || "external",
     }));
 
-  res.json(transactions);
+  res.json(allTransactions);
 });
 
 app.post('/campaigns/:id/updateRaised', async (req, res) => {
