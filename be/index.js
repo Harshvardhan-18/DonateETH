@@ -9,6 +9,7 @@ import { dirname, join } from "path";
 import genaiRoute from './genai.js';
 import { buildAdminRouter } from "./admin/router.js";
 import { buildNgoRouter } from "./ngo/router.js";
+import { fetchRecentWithdrawalEvents } from "./admin/services/blockchain.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -371,6 +372,45 @@ app.get('/campaigns/:id/donations', async (req, res) => {
   });
 
   res.json(deduped);
+});
+
+app.get('/campaigns/:id/ngo-transactions', async (req, res) => {
+  const { id } = req.params;
+
+  const campaign = await prisma.campaign.findFirst({
+    where: {
+      id,
+      ngo: {
+        status: { in: ["APPROVED", "ACTIVE"] },
+      },
+    },
+    include: { ngo: true },
+  });
+
+  if (!campaign) {
+    return res.status(404).json({ message: "Campaign not found" });
+  }
+
+  const ngoWallet = String(campaign.walletaddress || campaign.ngo?.walletAddress || "").trim().toLowerCase();
+  if (!ngoWallet) {
+    return res.json([]);
+  }
+
+  const chainWithdrawals = await fetchRecentWithdrawalEvents();
+  const transactions = chainWithdrawals
+    .filter((tx) => String(tx.ngoWallet || "").trim().toLowerCase() === ngoWallet)
+    .sort((a, b) => Number(b.blockNumber || 0) - Number(a.blockNumber || 0))
+    .slice(0, 3)
+    .map((tx) => ({
+      id: tx.txHash,
+      ngoWallet: tx.ngoWallet,
+      amountEth: tx.amountEth,
+      txHash: tx.txHash,
+      blockNumber: tx.blockNumber,
+      direction: "sent",
+    }));
+
+  res.json(transactions);
 });
 
 app.post('/campaigns/:id/updateRaised', async (req, res) => {

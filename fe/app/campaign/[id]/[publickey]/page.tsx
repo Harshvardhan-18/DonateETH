@@ -13,6 +13,8 @@ import {
   Users,
   CheckCircle2,
   AlertCircle,
+  Wallet,
+  ArrowUpRight,
 } from "lucide-react";
 import axios from "axios";
 import { useAccount, useWriteContract, useChainId } from "wagmi";
@@ -30,6 +32,7 @@ export default function CampaignPage() {
   const [donationAmount, setDonationAmount] = useState("");
   const [milestones, setMilestones] = useState([]);
   const [donations, setDonations] = useState<any[]>([]);
+  const [ngoTransactions, setNgoTransactions] = useState<any[]>([]);
   const [isDonating, setIsDonating] = useState(false);
   const [donationSuccess, setDonationSuccess] = useState(false);
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
@@ -54,6 +57,11 @@ export default function CampaignPage() {
         const response3 = await axios.get(apiUrl(`/campaigns/${id}/donations`));
         if (response3.data) {
           setDonations(response3.data);
+        }
+
+        const response4 = await axios.get(apiUrl(`/campaigns/${id}/ngo-transactions`));
+        if (response4.data) {
+          setNgoTransactions(response4.data);
         }
       } catch (error) {
         console.error("Error:", error);
@@ -93,6 +101,10 @@ export default function CampaignPage() {
       setCampaignData(response.data);
       const donationsRes = await axios.get(apiUrl(`/campaigns/${campaignData.id}/donations`));
       setDonations(donationsRes.data || []);
+
+      const ngoTransactionsRes = await axios.get(apiUrl(`/campaigns/${campaignData.id}/ngo-transactions`));
+      setNgoTransactions(ngoTransactionsRes.data || []);
+
       setDonationSuccess(true);
       setDonorName("");
       setDonationAmount("");
@@ -167,6 +179,7 @@ export default function CampaignPage() {
   const goalEth = Number(campaignData.goal || 0);
   const progress = goalEth > 0 ? Math.min(100, (effectiveRaised / goalEth) * 100) : 0;
   const campaignImageSrc = assetUrl(campaignData.imageUrl);
+  const ngoWallet = String(campaignData?.ngo?.walletAddress || campaignData?.walletaddress || "").trim();
   const isCampaignOwner =
     Boolean(address) &&
     String(address).toLowerCase() === String(campaignData?.walletaddress || "").toLowerCase();
@@ -192,6 +205,13 @@ export default function CampaignPage() {
                 {campaignData.ngo.name}
               </p>
             )}
+            <div className="mt-3 rounded-lg border bg-muted/30 p-4 text-sm">
+              <div className="flex items-center gap-2 font-medium">
+                <Wallet className="h-4 w-4" />
+                NGO Wallet
+              </div>
+              <p className="mt-1 break-all text-muted-foreground">{ngoWallet || "Not available"}</p>
+            </div>
             <h1 className="mt-2 text-3xl font-bold">{campaignData.title}</h1>
             <div className="mt-4 flex items-center space-x-4 text-sm text-muted-foreground">
               <span className="flex items-center">
@@ -209,12 +229,19 @@ export default function CampaignPage() {
                 <TabsTrigger value="about">About</TabsTrigger>
                 <TabsTrigger value="milestones">Milestones</TabsTrigger>
                 <TabsTrigger value="donors">Donors</TabsTrigger>
+                <TabsTrigger value="ngo-transactions">NGO Sent Transactions</TabsTrigger>
               </TabsList>
 
               <TabsContent value="about">
-                <p className="truncate text-muted-foreground" title={campaignData.description || ""}>
-                  {campaignData.description}
-                </p>
+                  <div className="space-y-3">
+                    <p className="truncate text-muted-foreground" title={campaignData.description || ""}>
+                      {campaignData.description}
+                    </p>
+                    <div className="rounded-lg border bg-muted/20 p-4 text-sm">
+                      <p className="font-medium">Tracking wallet</p>
+                      <p className="mt-1 break-all text-muted-foreground">{ngoWallet || "Not available"}</p>
+                    </div>
+                  </div>
               </TabsContent>
 
               <TabsContent value="milestones">
@@ -256,6 +283,41 @@ export default function CampaignPage() {
                   {donations.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No donations yet.</p>
                   ) : null}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="ngo-transactions">
+                <div className="space-y-3">
+                  {ngoTransactions.map((tx) => (
+                    <Card key={tx.id} className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Sent from NGO wallet</p>
+                          <p className="text-xs text-muted-foreground break-all">{tx.ngoWallet || ngoWallet}</p>
+                          <p className="text-xs text-muted-foreground">{tx.blockNumber ? `Block ${tx.blockNumber}` : "On-chain withdrawal"}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold">{Number(tx.amountEth || 0).toFixed(4)} ETH</p>
+                          <a
+                            href={`https://sepolia.etherscan.io/tx/${tx.txHash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-primary underline break-all"
+                            title="Open transaction in Sepolia Etherscan"
+                          >
+                            {tx.txHash}
+                          </a>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                  {ngoTransactions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No outgoing NGO transactions yet.</p>
+                  ) : null}
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <ArrowUpRight className="h-4 w-4" />
+                    Showing the latest 3 outgoing withdrawals for this NGO wallet.
+                  </p>
                 </div>
               </TabsContent>
             </Tabs>
