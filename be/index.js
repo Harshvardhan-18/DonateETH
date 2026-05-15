@@ -412,6 +412,7 @@ app.get('/campaigns/:id/ngo-transactions', async (req, res) => {
     .map((tx) => ({
       id: tx.txHash || tx.id,
       ngoWallet: tx.ngoWallet,
+      recipientWallet: tx.to || (tx.type === "withdrawal" ? tx.ngoWallet : null),
       amountEth: tx.amountEth,
       txHash: tx.txHash,
       blockNumber: tx.blockNumber,

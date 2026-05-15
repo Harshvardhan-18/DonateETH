@@ -298,10 +298,12 @@ export default function CampaignPage() {
                               {tx.type === "withdrawal" ? "Withdrawal from Contract" : "External Payment"}
                             </p>
                           </div>
-                          <p className="text-xs text-muted-foreground break-all">
-                            {tx.type === "withdrawal" ? "To: " : "From: "}
-                            {tx.ngoWallet || ngoWallet}
-                          </p>
+                          <div className="space-y-1 mt-1">
+                            <p className="text-[10px] text-muted-foreground uppercase font-medium">Recipient Wallet</p>
+                            <p className="text-xs font-mono break-all bg-muted/50 p-1.5 rounded border border-border/50">
+                              {tx.recipientWallet || "Unknown Recipient"}
+                            </p>
+                          </div>
                           <p className="text-xs text-muted-foreground">
                             {tx.blockNumber ? `Block ${tx.blockNumber}` : "On-chain"}
                           </p>
